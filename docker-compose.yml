@@ -1,0 +1,43 @@
+version: '3.9'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: gebeta-mongo
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: gebeta
+    networks:
+      - gebeta-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gebeta-backend
+    restart: unless-stopped
+    ports:
+      - '5000:5000'
+    env_file:
+      - ./backend/.env
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/gebeta
+      NODE_ENV: production
+    depends_on:
+      - mongodb
+    networks:
+      - gebeta-network
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+volumes:
+  mongo_data:
+
+networks:
+  gebeta-network:
+    driver: bridge
