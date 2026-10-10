@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Gebeta Delivery",
+    "slug": "gebeta-delivery",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "gebetadelivery",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": { "backgroundColor": "#ffffff", "resizeMode": "contain" },
+    "ios": { "supportsTablet": false, "bundleIdentifier": "com.gebeta.delivery" },
+    "android": { "package": "com.gebeta.delivery", "edgeToEdgeEnabled": false },
+    "web": { "bundler": "metro", "output": "single" },
+    "plugins": [
+      ["expo-router", { "origin": "gebetadelivery://" }],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Gebeta Delivery reports your position while a job is open so the customer can watch the food arrive.",
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ]
+    ]
+  }
+}
