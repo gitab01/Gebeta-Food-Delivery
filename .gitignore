@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# local secrets and machine state
+.env
+.env.*
+!.env.example
+
+# build output
+dist/
+web-build/
+.expo/
+*.tsbuild
+
+# logs
+*.log
+npm-debug.log*
+
+# editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
