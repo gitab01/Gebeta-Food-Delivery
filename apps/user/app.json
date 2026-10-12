@@ -6,11 +6,26 @@
     "orientation": "portrait",
     "scheme": "gebetauser",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": { "backgroundColor": "#ffffff", "resizeMode": "contain" },
-    "ios": { "supportsTablet": false, "bundleIdentifier": "com.gebeta.user" },
-    "android": { "package": "com.gebeta.user", "edgeToEdgeEnabled": false },
-    "web": { "bundler": "metro", "output": "single" },
-    "plugins": [["expo-router", { "origin": "gebetauser://" }]]
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.gebeta.user"
+    },
+    "android": {
+      "package": "com.gebeta.user"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "gebetauser://"
+        }
+      ],
+      "expo-status-bar",
+      "expo-font"
+    ]
   }
 }
