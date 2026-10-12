@@ -15,7 +15,8 @@ async function main() {
 
   server.listen(env.port, () => {
     console.log(`[gebeta] api + realtime listening on http://localhost:${env.port}`);
-    console.log(`[gebeta] mongo ${env.mongoUri}`);
+    // Credentials masked: this line lands in hosted logs verbatim.
+    console.log(`[gebeta] mongo ${env.mongoUri.replace(/\/\/[^/@]*@/, '//:***@')}`);
     console.log(`[gebeta] payment gateway: ${env.gateway}`);
   });
 
