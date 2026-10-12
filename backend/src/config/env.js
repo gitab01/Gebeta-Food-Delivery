@@ -40,4 +40,32 @@ if (env.nodeEnv === 'production' && env.jwtSecret === 'gebeta-dev-secret-change-
   throw new Error('JWT_SECRET must be set in production');
 }
 
+/**
+ * Reports only the shape of MONGODB_URI, never the password — hosted logs outlive this debug session.
+ */
+function describeMongoUri() {
+  const uri = process.env.MONGODB_URI || '';
+  if (!uri) return 'MONGODB_URI is unset, so the local development database is used';
+  const problems = [];
+  if (/<[^>]*>/.test(uri)) problems.push('contains an unfilled <placeholder>');
+  if (uri !== uri.trim()) problems.push('has leading or trailing whitespace');
+  if (/["']/.test(uri)) problems.push('contains a quote character');
+  if (/\s/.test(uri.trim())) problems.push('contains a space');
+  const m = /^mongodb(\+srv)?:\/\/(?:([^@/?]*)@)?([^/?]+)\/([^?]*)(\?.*)?$/.exec(uri.trim());
+  const note = problems.length ? `PROBLEMS: ${problems.join('; ')}` : 'shape well-formed';
+  if (!m) return `MONGODB_URI is not a parseable mongodb:// or mongodb+srv:// URI (length ${uri.length})${problems.length ? ` | ${problems.join('; ')}` : ''}`;
+  const [, srv, rawCreds, host, db] = m;
+  const creds = rawCreds || '';
+  const pass = creds.includes(':') ? creds.slice(creds.indexOf(':') + 1) : '';
+  return [
+    `scheme mongodb${srv || ''}`,
+    `user "${creds.split(':')[0] || '(empty)'}"`,
+    `password length ${pass.length}`,
+    `host "${host}"`,
+    `database "${db || '(none — server default)'}"`,
+    note
+  ].join(' | ');
+}
+
 module.exports = env;
+module.exports.describeMongoUri = describeMongoUri;

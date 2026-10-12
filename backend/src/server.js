@@ -33,6 +33,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('[gebeta] failed to start:', err.message);
+  console.error('[gebeta] failed to start:', err.message.split('\n')[0]);
+  console.error('[gebeta] mongo config:', env.describeMongoUri());
   process.exit(1);
 });
