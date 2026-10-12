@@ -1,0 +1,25 @@
+# Render blueprint: New → Blueprint → connect this repo and these settings arrive pre-filled.
+# `sync: false` means Render asks you for the value on the first deploy, so a real secret
+# never has to pass through a terminal or this file.
+services:
+  - type: web
+    name: gebeta-api
+    plan: free
+    runtime: node
+    rootDir: backend
+    region: oregon
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PAYMENT_GATEWAY
+        value: mock
+      - key: MONGODB_URI
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
