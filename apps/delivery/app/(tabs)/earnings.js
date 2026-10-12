@@ -1,13 +1,36 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api, etb, realtime } from '../../../shared/api';
-import { LABEL } from '../../../shared/status';
-import { colors, space, type } from '../../../shared/theme';
+import { Bars, Metric, Share } from '../../../shared/charts';
+import { useI18n } from '../../../shared/lang';
+import { colors, space, type, useStyles } from '../../../shared/theme';
 import { Card, Empty, Loading, Notice, Row, Screen } from '../../../shared/ui';
 
-const clock = (iso) => (iso ? new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
+const clock = (iso) =>
+  iso ? new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+
+const dayKey = (iso) => new Date(iso).toISOString().slice(0, 10);
+
+/** Seven buckets ending today, so a quiet day still shows as a gap rather than a lie. */
+function lastSeven(rows) {
+  const days = [];
+  for (let back = 6; back >= 0; back -= 1) {
+    const date = new Date();
+    date.setHours(12, 0, 0, 0);
+    date.setDate(date.getDate() - back);
+    days.push({ key: date.toISOString().slice(0, 10), value: 0, label: date.toLocaleDateString([], { weekday: 'short' }).slice(0, 2) });
+  }
+  const byKey = new Map(days.map((d) => [d.key, d]));
+  for (const row of rows) {
+    const bucket = byKey.get(dayKey(row.deliveredAt));
+    if (bucket) bucket.value += row.feeCents;
+  }
+  return days;
+}
 
 export default function Earnings() {
+  const styles = useStyles(makeStyles);
+  const { t } = useI18n();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -36,36 +59,73 @@ export default function Earnings() {
     };
   }, [load]);
 
-  if (loading) return <Loading label="Counting your fares" />;
+  const days = useMemo(() => lastSeven(data?.rows || []), [data]);
+  const bestDay = days.reduce((top, day) => (day.value > (top?.value ?? -1) ? day : top), null);
+  const weekEarlier = Math.max(0, (data?.lifetimeCents || 0) - (data?.weekCents || 0));
+
+  if (loading) return <Loading label={t('earn.counting')} />;
 
   return (
-    <Screen style={{ paddingHorizontal: 0, paddingTop: 0 }}>
-      <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl }}>
+    <Screen>
+      <ScrollView contentContainerStyle={styles.scroll}>
         <Notice text={error} />
 
-        <Text style={type.eyebrow}>Today</Text>
-        <Text style={styles.big}>{data ? etb(data.todayCents) : etb(0)}</Text>
+        <Text style={type.eyebrow}>{t('earn.today')}</Text>
+        <Text style={styles.big}>{etb(data?.todayCents || 0)}</Text>
 
-        <Card style={{ marginTop: space.lg }}>
-          <Row label="This week" value={etb(data?.weekCents || 0)} />
-          <Row label="Lifetime" value={etb(data?.lifetimeCents || 0)} />
-          <Row label="Deliveries" value={String(data?.completedDeliveries || 0)} />
+        <View style={styles.metrics}>
+          <Card style={styles.metricCard}>
+            <Metric label={t('earn.week')} value={etb(data?.weekCents || 0)} icon="money" />
+          </Card>
+          <Card style={styles.metricCard}>
+            <Metric label={t('earn.completed')} value={String(data?.completedDeliveries || 0)} icon="check" tone="green" />
+          </Card>
+        </View>
+
+        <Card style={{ marginTop: space.md }}>
+          <Text style={type.eyebrow}>{t('earn.byDay')}</Text>
+          <View style={{ marginTop: space.md }}>
+            <Bars
+              data={days}
+              height={120}
+              labelFor={(day) => day.label}
+              bestLabel={bestDay?.value ? `${t('earn.best')} · ${bestDay.label}` : t('earn.noneShort')}
+            />
+          </View>
+        </Card>
+
+        <Card style={{ marginTop: space.md }}>
+          <Text style={type.eyebrow}>{t('earn.byStatus')}</Text>
+          <View style={{ marginTop: space.md }}>
+            <Share
+              total={data?.lifetimeCents || 0}
+              slices={[
+                { key: 'week', value: data?.weekCents || 0, label: t('earn.week'), color: colors.accent },
+                { key: 'before', value: weekEarlier, label: t('earn.before'), color: colors.line }
+              ]}
+            />
+          </View>
+          <Row label={t('earn.total')} value={etb(data?.lifetimeCents || 0)} style={{ marginTop: space.md }} />
           <Row
-            label="Rating"
-            value={data?.ratingCount ? `${data.ratingStars.toFixed(1)} ★ from ${data.ratingCount}` : 'no ratings yet'}
+            label={t('earn.perJob')}
+            value={data?.completedDeliveries ? etb(Math.round((data.lifetimeCents || 0) / data.completedDeliveries)) : '—'}
+          />
+          <Row
+            label={t('earn.rating')}
+            value={data?.ratingCount ? `${data.ratingStars.toFixed(1)} ★ (${data.ratingCount})` : t('home.notRated')}
           />
         </Card>
 
-        <Text style={[type.eyebrow, { marginTop: space.xl, marginBottom: space.sm }]}>Settled fares</Text>
+        <Text style={[type.eyebrow, { marginTop: space.xl, marginBottom: space.sm }]}>{t('earn.settled')}</Text>
         {!data?.rows?.length ? (
-          <Empty title="No completed jobs yet" body="A fare appears here once you confirm delivery at the door." />
+          <Empty icon="earnings" title={t('earn.none')} body={t('earn.noneBody')} />
         ) : (
           data.rows.map((row) => (
             <View key={row.orderId} style={styles.line}>
               <View style={{ flex: 1 }}>
                 <Text style={type.body}>#{row.orderId.slice(-6)}</Text>
                 <Text style={type.small}>
-                  {clock(row.deliveredAt)} · {LABEL[row.status]} · order {etb(row.orderTotalCents)}
+                  {clock(row.deliveredAt)} · {t(`st.${row.status}`)} · {etb(row.orderTotalCents)}
                 </Text>
               </View>
               <Text style={styles.fee}>{etb(row.feeCents)}</Text>
@@ -73,23 +133,26 @@ export default function Earnings() {
           ))
         )}
 
-        <Text style={[type.small, { marginTop: space.xl, color: colors.faint }]}>
-          The fare is fixed when the order is placed, so a longer trip does not change what you are paid for this one.
-        </Text>
+        <Text style={[type.small, styles.foot]}>{t('earn.fareFoot')}</Text>
       </ScrollView>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  big: { fontSize: 42, fontWeight: '800', letterSpacing: -1.5, marginTop: 4 },
-  line: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    paddingVertical: space.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line
-  },
-  fee: { fontSize: 17, fontWeight: '800' }
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    scroll: { paddingVertical: space.lg, paddingBottom: space.xxl },
+    big: { fontSize: 42, fontWeight: '800', letterSpacing: -1.5, marginTop: 4, color: colors.ink },
+    metrics: { flexDirection: 'row', gap: space.md, marginTop: space.lg },
+    metricCard: { flex: 1 },
+    line: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: space.md,
+      paddingVertical: space.md,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.line
+    },
+    fee: { fontSize: 17, fontWeight: '800' },
+    foot: { marginTop: space.xl }
+  });

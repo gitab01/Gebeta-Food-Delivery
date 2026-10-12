@@ -13,6 +13,24 @@ const addressSchema = new mongoose.Schema(
   { _id: true }
 );
 
+/**
+ * A payment choice the customer saved, not card data. Only the brand, a display
+ * label, the last four digits and an expiry are stored: a real PAN belongs to the
+ * gateway, and the `last4` pattern is what keeps a mistyped full number out of the
+ * database.
+ */
+const paymentMethodSchema = new mongoose.Schema(
+  {
+    brand: { type: String, enum: ['card', 'telebirr', 'cbebir', 'cash'], required: true },
+    label: { type: String, default: '' },
+    last4: { type: String, default: '', match: /^\d{0,4}$/ },
+    expiryMonth: { type: Number, min: 1, max: 12 },
+    expiryYear: { type: Number, min: 2000, max: 2100 },
+    isDefault: { type: Boolean, default: false }
+  },
+  { _id: true }
+);
+
 const userSchema = new mongoose.Schema(
   {
     phone: { type: String, required: true, unique: true, trim: true },
@@ -21,6 +39,7 @@ const userSchema = new mongoose.Schema(
     passwordHash: { type: String, required: true },
     role: { type: String, enum: ['customer', 'courier', 'restaurant', 'admin'], default: 'customer', index: true },
     addresses: [addressSchema],
+    paymentMethods: [paymentMethodSchema],
     isBlocked: { type: Boolean, default: false },
     lastLoginAt: Date
   },

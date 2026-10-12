@@ -1,20 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, closeRealtime, readSession, realtime, writeSession } from './api.js';
 import { Empty, Field, Notice } from './components.jsx';
+import { Brand, Ico, ThemeToggle } from './brand.jsx';
 import Live from './views/Live.jsx';
 import Restaurants from './views/Restaurants.jsx';
 import Couriers from './views/Couriers.jsx';
 import Users from './views/Users.jsx';
 import Kitchen from './views/Kitchen.jsx';
+import Analytics from './views/Analytics.jsx';
+import Settings from './views/Settings.jsx';
 
 const VIEWS = [
-  { key: 'live', label: 'Live ops', view: Live, roles: ['admin'] },
-  { key: 'restaurants', label: 'Kitchens', view: Restaurants, roles: ['admin'] },
-  { key: 'couriers', label: 'Couriers', view: Couriers, roles: ['admin'] },
-  { key: 'users', label: 'Accounts', view: Users, roles: ['admin'] },
+  { key: 'live', label: 'Live ops', icon: 'pulse', view: Live, roles: ['admin'] },
+  { key: 'analytics', label: 'Analytics', icon: 'chart', view: Analytics, roles: ['admin'] },
+  { key: 'restaurants', label: 'Kitchens', icon: 'store', view: Restaurants, roles: ['admin'] },
+  { key: 'couriers', label: 'Couriers', icon: 'bike', view: Couriers, roles: ['admin'] },
+  { key: 'users', label: 'Accounts', icon: 'users', view: Users, roles: ['admin'] },
+  { key: 'settings', label: 'Settings', icon: 'sliders', view: Settings, roles: ['admin'] },
   // The same web app is the kitchen's console when an owner signs in, so the
   // restaurant-role API has a real client instead of a theoretical one.
-  { key: 'kitchen', label: 'Kitchen queue', view: Kitchen, roles: ['restaurant'] }
+  { key: 'kitchen', label: 'Kitchen queue', icon: 'flame', view: Kitchen, roles: ['restaurant'] }
 ];
 
 function Login({ onDone }) {
@@ -45,7 +50,7 @@ function Login({ onDone }) {
   return (
     <div className="login">
       <form className="card" onSubmit={submit}>
-        <h1>Gebeta Admin</h1>
+        <Brand />
         <p className="sub">Operator console for the delivery marketplace.</p>
         <Notice text={error} />
         <Field label="Phone">
@@ -120,22 +125,21 @@ export default function App() {
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="brand">
-          Gebeta<span>.</span>Admin
-        </div>
+        <Brand />
         <nav className="nav">
           {allowed.map((v) => (
             <button key={v.key} className={active?.key === v.key ? 'on' : ''} onClick={() => setTab(v.key)}>
-              {v.label}
+              <Ico name={v.icon} />
+              <span className="label">{v.label}</span>
             </button>
           ))}
         </nav>
+        <ThemeToggle />
         <span className={`live ${connected ? 'on' : ''}`}>
           <i />
-          {connected ? 'realtime connected' : 'reconnecting'}
+          {connected ? 'realtime' : 'reconnecting'}
         </span>
-        <span className="tiny dim">{session.user.name}</span>
-        <button className="ghost" onClick={logout}>
+        <button className="ghost" onClick={logout} title={session.user.name}>
           sign out
         </button>
       </header>

@@ -73,9 +73,6 @@ router.get(
       view.distanceMeters = distanceMeters({ lat, lng }, { lat: view.lat, lng: view.lng });
       view.withinRange = view.distanceMeters <= view.deliveryRadiusMeters;
     }
-    const available = restaurant.menu.reduce((n, s) => n + s.items.filter((i) => i.available).length, 0);
-    const total = restaurant.menu.reduce((n, s) => n + s.items.length, 0);
-    view.menuSummary = { available, total };
     res.json({ restaurant: view });
   })
 );

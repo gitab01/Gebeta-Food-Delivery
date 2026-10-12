@@ -34,6 +34,15 @@ const offerAttemptSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const trailPointSchema = new mongoose.Schema(
+  {
+    lat: Number,
+    lng: Number,
+    at: { type: Date, default: Date.now }
+  },
+  { _id: false }
+);
+
 const orderSchema = new mongoose.Schema(
   {
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
@@ -82,6 +91,7 @@ const orderSchema = new mongoose.Schema(
     },
     contactPhone: { type: String, default: '' },
     notes: { type: String, default: '' },
+    courierTrail: { type: [trailPointSchema], default: [] },
 
     distanceMeters: Number,
     placedAt: { type: Date, default: Date.now },

@@ -1,8 +1,9 @@
 import React from 'react';
 import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { SessionProvider, useSession } from '../../shared/session';
-import { colors } from '../../shared/theme';
+import { AppProviders } from '../../shared/providers';
+import { colors, useTheme } from '../../shared/theme';
+import { useI18n } from '../../shared/lang';
 import { usePositionReporting } from '../lib/location';
 
 /**
@@ -15,26 +16,39 @@ function PositionReporter() {
   return null;
 }
 
+function RootNavigator() {
+  useTheme();
+  const { t } = useI18n();
+
+  return (
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.paper },
+        headerTintColor: colors.ink,
+        headerTitleStyle: { fontWeight: '700' },
+        headerShadowVisible: false,
+        contentStyle: { backgroundColor: colors.paper },
+        headerBackTitleVisible: false
+      }}
+    >
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="register" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="job/[id]" options={{ title: t('job.title') }} />
+      <Stack.Screen name="vehicle" options={{ title: t('vehicle.title') }} />
+      <Stack.Screen name="settings" options={{ title: t('set.title') }} />
+    </Stack>
+  );
+}
+
 export default function RootLayout() {
   return (
     <SessionProvider>
-      <PositionReporter />
-      <StatusBar style="dark" />
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: colors.paper },
-          headerTintColor: colors.ink,
-          headerTitleStyle: { fontWeight: '700' },
-          headerShadowVisible: false,
-          contentStyle: { backgroundColor: colors.paper }
-        }}
-      >
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="register" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="job/[id]" options={{ title: 'Job' }} />
-      </Stack>
+      <AppProviders>
+        <PositionReporter />
+        <RootNavigator />
+      </AppProviders>
     </SessionProvider>
   );
 }

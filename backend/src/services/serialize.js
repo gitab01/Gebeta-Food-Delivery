@@ -1,5 +1,5 @@
 const { STATUS, ADDRESS_VISIBLE } = require('./status');
-const { coordsToLatLng } = require('./geo');
+const { coordsToLatLng, isPlausible } = require('./geo');
 
 /**
  * The payload that goes to a shared order room — customer, restaurant and courier
@@ -20,6 +20,7 @@ function orderPublicView(order) {
     courierName: o.courierName || (o.courierId && o.courierId.name) || null,
     courierVehicle: o.courierId?.vehicle || o.courierVehicle || null,
     courierLocation: o.courierLocation || null,
+    courierTrail: (o.courierTrail || []).map((p) => ({ lat: p.lat, lng: p.lng, at: p.at })),
     items: o.items || [],
     subtotalCents: o.subtotalCents,
     deliveryFeeCents: o.deliveryFeeCents,
@@ -96,6 +97,8 @@ function courierJobView(order, courier, restaurant) {
 function courierPublicView(courier) {
   if (!courier) return null;
   const coords = courier.lastKnownLocation?.coordinates;
+  const stored = coords ? { lat: coords[1], lng: coords[0] } : null;
+  const located = stored && isPlausible(stored) ? stored : null;
   return {
     id: String(courier._id),
     userId: String(courier.userId),
@@ -106,14 +109,27 @@ function courierPublicView(courier) {
     ratingStars: courier.ratingStars,
     ratingCount: courier.ratingCount,
     completedDeliveries: courier.completedDeliveries,
-    lat: coords ? coords[1] : null,
-    lng: coords ? coords[0] : null,
+    lat: located ? located.lat : null,
+    lng: located ? located.lng : null,
     locationUpdatedAt: courier.locationUpdatedAt || null
   };
 }
 
 function restaurantPublicView(restaurant) {
   const r = restaurant.toObject ? restaurant.toObject({ virtuals: true }) : restaurant;
+  const menu = (r.menu || []).map((section) => ({
+    id: String(section._id),
+    name: section.name,
+    items: (section.items || []).map((item) => ({
+      id: String(item._id),
+      name: item.name,
+      description: item.description,
+      priceCents: item.priceCents,
+      available: item.available,
+      prepMinutes: item.prepMinutes,
+      emoji: item.emoji
+    }))
+  }));
   return {
     id: String(r._id),
     name: r.name,
@@ -131,19 +147,11 @@ function restaurantPublicView(restaurant) {
     ratingCount: r.ratingCount,
     lat: r.location?.coordinates?.[1] ?? null,
     lng: r.location?.coordinates?.[0] ?? null,
-    menu: (r.menu || []).map((section) => ({
-      id: String(section._id),
-      name: section.name,
-      items: (section.items || []).map((item) => ({
-        id: String(item._id),
-        name: item.name,
-        description: item.description,
-        priceCents: item.priceCents,
-        available: item.available,
-        prepMinutes: item.prepMinutes,
-        emoji: item.emoji
-      }))
-    }))
+    menuSummary: {
+      available: menu.reduce((n, s) => n + s.items.filter((i) => i.available).length, 0),
+      total: menu.reduce((n, s) => n + s.items.length, 0)
+    },
+    menu
   };
 }
 

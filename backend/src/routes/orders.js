@@ -3,6 +3,7 @@ const Order = require('../models/Order');
 const Rating = require('../models/Rating');
 const Restaurant = require('../models/Restaurant');
 const Courier = require('../models/Courier');
+const Settings = require('../models/Settings');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/error');
 const { createOrder, transition, getOrderForRequester } = require('../services/orderService');
@@ -18,6 +19,12 @@ router.post(
     const { restaurantId, lines, addressId, deliveryAddress, contactPhone, notes } = req.body || {};
     if (!restaurantId || !Array.isArray(lines)) {
       return res.status(400).json({ error: { code: 'VALIDATION', message: 'restaurantId and lines[] are required' } });
+    }
+    const settings = await Settings.load();
+    if (settings?.maintenanceMode) {
+      return res.status(503).json({
+        error: { code: 'MAINTENANCE', message: 'Orders are paused for maintenance. Existing orders are unaffected.' }
+      });
     }
     const order = await createOrder({
       customer: req.user,

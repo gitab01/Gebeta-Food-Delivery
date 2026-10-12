@@ -80,7 +80,28 @@ async function findCandidates(order, restaurant, radiusMeters) {
     isOnline: true,
     lastKnownLocation: { $geoWithin: { $centerSphere: [[lng, lat], radiusMeters / 6378100] } }
   }).lean();
+  await reconcileLoad(couriers);
   return rankCandidates(couriers, { lat, lng }, { exclude: triedCourierIds(order) });
+}
+
+/**
+ * `activeOrders` is a cache written at each transition, so a crash or a cancellation between
+ * the two can leave a courier permanently at the cap with nothing in his bag. Ranking reads
+ * the real open jobs and repairs the cache in passing.
+ */
+async function reconcileLoad(couriers) {
+  if (!couriers.length) return;
+  const counted = await Order.aggregate([
+    { $match: { courierId: { $in: couriers.map((c) => c._id) }, status: { $in: ACTIVE_FOR_COURIER } } },
+    { $group: { _id: '$courierId', n: { $sum: 1 } } }
+  ]);
+  const live = new Map(counted.map((row) => [String(row._id), row.n]));
+  for (const courier of couriers) {
+    const actual = live.get(String(courier._id)) || 0;
+    if (courier.activeOrders === actual) continue;
+    courier.activeOrders = actual;
+    await Courier.updateOne({ _id: courier._id }, { $set: { activeOrders: actual } });
+  }
 }
 
 /** Offer this order to the best available courier, widening the radius as attempts fail. */

@@ -6,7 +6,8 @@ const { asyncHandler } = require('../middleware/error');
 const { transition, refreshEta } = require('../services/orderService');
 const { orderPublicView, courierJobView, courierPublicView } = require('../services/serialize');
 const { STATUS, ACTOR, ACTIVE_FOR_COURIER } = require('../services/status');
-const { distanceMeters } = require('../services/geo');
+const { distanceMeters, isPlausible } = require('../services/geo');
+const { recordTrail } = require('../services/trail');
 const Restaurant = require('../models/Restaurant');
 const env = require('../config/env');
 const bus = require('../realtime/bus');
@@ -56,7 +57,52 @@ router.get(
       .sort({ assignedAt: -1 });
     res.json({
       courier: courierPublicView(courier),
+      vehicle: {
+        type: courier.vehicle,
+        licencePlate: courier.licencePlate || '',
+        insuranceProvider: courier.insuranceProvider || '',
+        insuranceExpiresAt: courier.insuranceExpiresAt || null
+      },
       jobs: active.map((o) => courierJobView(o, courier, o.restaurantId))
+    });
+  })
+);
+
+const VEHICLES = ['foot', 'bicycle', 'motorbike', 'car'];
+
+router.patch(
+  '/vehicle',
+  asyncHandler(async (req, res) => {
+    const courier = await me(req);
+    const { type, licencePlate, insuranceProvider, insuranceExpiresAt } = req.body || {};
+    if (type !== undefined) {
+      if (!VEHICLES.includes(type)) {
+        return res.status(400).json({ error: { code: 'VALIDATION', message: `vehicle type must be one of ${VEHICLES.join(', ')}` } });
+      }
+      courier.vehicle = type;
+    }
+    if (licencePlate !== undefined) {
+      const plate = String(licencePlate).toUpperCase().replace(/[\s-]/g, '').slice(0, 12);
+      courier.licencePlate = plate;
+    }
+    if (insuranceProvider !== undefined) {
+      courier.insuranceProvider = String(insuranceProvider).trim().slice(0, 40);
+    }
+    if (insuranceExpiresAt !== undefined) {
+      const when = new Date(insuranceExpiresAt);
+      if (Number.isNaN(when.getTime())) {
+        return res.status(400).json({ error: { code: 'VALIDATION', message: 'insuranceExpiresAt must be a date' } });
+      }
+      courier.insuranceExpiresAt = when;
+    }
+    await courier.save();
+    res.json({
+      vehicle: {
+        type: courier.vehicle,
+        licencePlate: courier.licencePlate,
+        insuranceProvider: courier.insuranceProvider,
+        insuranceExpiresAt: courier.insuranceExpiresAt
+      }
     });
   })
 );
@@ -86,16 +132,19 @@ router.post(
     const courier = await me(req);
     const lat = Number(req.body?.lat);
     const lng = Number(req.body?.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return res.status(400).json({ error: { code: 'VALIDATION', message: 'lat and lng are required' } });
+    if (!isPlausible({ lat, lng })) {
+      return res
+        .status(400)
+        .json({ error: { code: 'VALIDATION', message: 'A real position is required - 0,0 means the device has no fix yet' } });
     }
     const now = Date.now();
     const sinceLast = now - (courier.locationUpdatedAt ? new Date(courier.locationUpdatedAt).getTime() : 0);
     courier.lastKnownLocation = { type: 'Point', coordinates: [lng, lat] };
     courier.locationUpdatedAt = new Date();
     await courier.save();
-    const open = await Order.find({ courierId: courier._id, status: { $in: ACTIVE_FOR_COURIER } }).select('_id');
+    const open = await Order.find({ courierId: courier._id, status: { $in: ACTIVE_FOR_COURIER } }).select('_id courierTrail');
     for (const order of open) {
+      await recordTrail(order, { lat, lng });
       bus.emitToRoom(bus.orderRoom(order._id), 'courier:location', { courierId: String(courier._id), lat, lng, at: courier.locationUpdatedAt });
       await refreshEta(order._id);
     }
@@ -168,12 +217,25 @@ router.get(
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const cents = (rows) => rows.reduce((sum, r) => sum + (r.courierFeeCents || 0), 0);
+    // The recent rows above are capped, so lifetime comes from its own count. The cached
+    // totals drift, and a drifting cache once made this week read larger than all time.
+    const [allTime] = await Order.aggregate([
+      { $match: { courierId: courier._id, status: { $in: [STATUS.DELIVERED, STATUS.COMPLETED] } } },
+      { $group: { _id: null, jobs: { $sum: 1 }, cents: { $sum: '$courierFeeCents' } } }
+    ]);
+    const lifetimeCents = allTime?.cents || 0;
+    const completedDeliveries = allTime?.jobs || 0;
+    if (courier.earningsCents !== lifetimeCents || courier.completedDeliveries !== completedDeliveries) {
+      courier.earningsCents = lifetimeCents;
+      courier.completedDeliveries = completedDeliveries;
+      await courier.save();
+    }
     res.json({
       currency: 'ETB',
-      lifetimeCents: courier.earningsCents,
+      lifetimeCents,
       todayCents: cents(settled.filter((r) => r.deliveredAt && new Date(r.deliveredAt) >= todayStart)),
       weekCents: cents(settled.filter((r) => r.deliveredAt && new Date(r.deliveredAt) >= new Date(Date.now() - 7 * 864e5))),
-      completedDeliveries: courier.completedDeliveries,
+      completedDeliveries,
       ratingStars: courier.ratingStars,
       ratingCount: courier.ratingCount,
       rows: settled.map((r) => ({

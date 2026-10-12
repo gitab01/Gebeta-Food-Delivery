@@ -40,9 +40,10 @@ function buildEta({ now = new Date(), status, order, restaurant, courier, courie
   const toCustomer = travelMinutes(distanceMeters(restaurantLatLng, customerLatLng), vehicle, HANDOVER_MINUTES);
 
   if (status === STATUS.PICKED_UP) {
-    const metres = distanceMeters(courierLocation, customerLatLng);
+    const metres = distanceMeters(courierLocation, customerLatLng) || 0;
     const minutes = travelMinutes(metres, vehicle, 2);
-    return { ...at(minutes), reason: 'On the road — ' + Math.max(1, Math.round((metres || 0) / 1000) + ' km from the drop-off') };
+    const away = metres < 1000 ? `${Math.round(metres)} m` : `${(metres / 1000).toFixed(1)} km`;
+    return { ...at(minutes), reason: `On the road — ${away} from the drop-off` };
   }
 
   if (status === STATUS.ASSIGNED || status === STATUS.READY) {

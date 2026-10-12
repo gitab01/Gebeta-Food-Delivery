@@ -54,6 +54,9 @@ export const api = {
   me: () => request('/auth/me'),
   addAddress: (payload) => request('/auth/me/addresses', { method: 'POST', body: payload }),
   removeAddress: (addressId) => request(`/auth/me/addresses/${addressId}`, { method: 'DELETE' }),
+  addPaymentMethod: (payload) => request('/auth/me/payment-methods', { method: 'POST', body: payload }),
+  setDefaultPaymentMethod: (methodId) => request(`/auth/me/payment-methods/${methodId}/default`, { method: 'PATCH' }),
+  removePaymentMethod: (methodId) => request(`/auth/me/payment-methods/${methodId}`, { method: 'DELETE' }),
 
   restaurants: (lat, lng) => request(`/restaurants?lat=${lat}&lng=${lng}`),
   restaurant: (id, lat, lng) =>
@@ -76,7 +79,8 @@ export const api = {
   courierLocation: (lat, lng) => request('/courier/location', { method: 'POST', body: { lat, lng } }),
   courierPickup: (id) => request(`/courier/jobs/${id}/pickup`, { method: 'POST' }),
   courierDeliver: (id) => request(`/courier/jobs/${id}/deliver`, { method: 'POST' }),
-  courierEarnings: () => request('/courier/earnings')
+  courierEarnings: () => request('/courier/earnings'),
+  courierVehicle: (payload) => request('/courier/vehicle', { method: 'PATCH', body: payload })
 };
 
 let socket = null;

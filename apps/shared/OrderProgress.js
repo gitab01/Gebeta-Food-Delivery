@@ -1,18 +1,23 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colors, radius, space, statusColor, type } from './theme';
-import { ORDER, RAIL, TERMINAL, stageIndex } from './status';
+import { colors, radius, space, statusColor, type, useStyles } from './theme';
+import { useI18n } from './lang';
+import { ORDER, TERMINAL, stageIndex } from './status';
 
 /**
  * The order state machine, drawn from the server's own statusHistory. A client
  * can only ever show a step the backend actually recorded.
  */
 export function OrderProgress({ order }) {
+  const styles = useStyles(makeStyles);
+  const { t } = useI18n();
   const reached = new Set((order?.statusHistory || []).map((e) => e.status));
   const current = order?.status;
   const ended = TERMINAL.includes(current);
   const failed = current === 'REJECTED' || current === 'CANCELLED';
-  const steps = failed ? [...ORDER.slice(0, Math.max(1, stageIndex(current === 'REJECTED' ? 'PAID' : 'PLACED'))), current] : ORDER;
+  const steps = failed
+    ? [...ORDER.slice(0, Math.max(1, stageIndex(current === 'REJECTED' ? 'PAID' : 'PLACED'))), current]
+    : ORDER;
 
   return (
     <View style={styles.wrap}>
@@ -35,7 +40,7 @@ export function OrderProgress({ order }) {
                 ]}
                 numberOfLines={1}
               >
-                {RAIL[status] || status}
+                {t(`rail.${status}`)}
               </Text>
             </View>
           );
@@ -44,7 +49,7 @@ export function OrderProgress({ order }) {
       {order?.eta?.reason ? (
         <View style={styles.eta}>
           <Text style={[styles.etaMinutes, { color: statusColor(current).fg }]} numberOfLines={1}>
-            {ended ? 'Closed' : `${order.eta.minutes ?? '—'} min`}
+            {ended ? t('track.closed') : t('common.minutes', { n: order.eta.minutes ?? '—' })}
           </Text>
           <Text style={[type.small, { flex: 1 }]}>{order.eta.reason}</Text>
         </View>
@@ -53,21 +58,22 @@ export function OrderProgress({ order }) {
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { gap: space.md },
-  track: { flexDirection: 'row' },
-  step: { gap: 6 },
-  railWrap: { flexDirection: 'row', alignItems: 'center' },
-  node: { width: 12, height: 12, borderRadius: 6 },
-  rail: { flex: 1, height: 2, backgroundColor: colors.line, marginRight: 4 },
-  label: { fontSize: 11, lineHeight: 14, paddingRight: 4 },
-  eta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    backgroundColor: colors.tint,
-    borderRadius: radius.md,
-    padding: space.md
-  },
-  etaMinutes: { fontSize: 17, fontWeight: '800', letterSpacing: -0.3, flexShrink: 0 },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    wrap: { gap: space.md },
+    track: { flexDirection: 'row' },
+    step: { gap: 6 },
+    railWrap: { flexDirection: 'row', alignItems: 'center' },
+    node: { width: 12, height: 12, borderRadius: 6 },
+    rail: { flex: 1, height: 2, backgroundColor: colors.line, marginRight: 4 },
+    label: { fontSize: 11, lineHeight: 14, paddingRight: 4 },
+    eta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: space.sm,
+      backgroundColor: colors.tint,
+      borderRadius: radius.md,
+      padding: space.md
+    },
+    etaMinutes: { fontSize: 17, fontWeight: '800', letterSpacing: -0.3, flexShrink: 0 }
+  });

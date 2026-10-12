@@ -7,7 +7,8 @@ const Courier = require('../models/Courier');
 const Restaurant = require('../models/Restaurant');
 const bus = require('./bus');
 const { orderPublicView } = require('../services/serialize');
-const { distanceMeters } = require('../services/geo');
+const { distanceMeters, isPlausible } = require('../services/geo');
+const { recordTrail } = require('../services/trail');
 const { ACTIVE_FOR_COURIER } = require('../services/status');
 
 /** Room membership is authorised here: a token alone does not entitle you to an order room. */
@@ -105,7 +106,7 @@ function initRealtime(httpServer) {
       if (actor.role !== 'courier') return;
       const lat = Number(payload.lat);
       const lng = Number(payload.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      if (!isPlausible({ lat, lng })) return; // a device with no fix reports 0,0
 
       const now = Date.now();
       const last = socket.data.lastLocationAt || 0;
@@ -122,6 +123,7 @@ function initRealtime(httpServer) {
       const open = await Order.find({ courierId: courier._id, status: { $in: ACTIVE_FOR_COURIER } });
       const update = { courierId: String(courier._id), lat, lng, at: courier.locationUpdatedAt };
       for (const order of open) {
+        await recordTrail(order, { lat, lng });
         bus.emitToRoom(bus.orderRoom(order._id), 'courier:location', {
           ...update,
           restaurantLocation: undefined

@@ -58,6 +58,9 @@ export const api = {
   },
   setUserBlock: (id, isBlocked) => request(`/admin/users/${id}/block`, { method: 'POST', body: { isBlocked } }),
   sweep: () => request('/admin/watchdog/sweep', { method: 'POST' }),
+  analytics: (days = 14) => request(`/admin/analytics?days=${days}`),
+  settings: () => request('/admin/settings'),
+  saveSettings: (patch) => request('/admin/settings', { method: 'PATCH', body: patch }),
   // The kitchen console signs in as a restaurant owner, not an operator.
   owner: {
     me: () => request('/restaurant-owner/me'),

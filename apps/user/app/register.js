@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { useSession } from '../../shared/session';
-import { colors, space, type } from '../../shared/theme';
+import { colors, radius, space, type, useStyles } from '../../shared/theme';
 import { Button, Field, Notice, Screen } from '../../shared/ui';
+import { useI18n } from '../../shared/lang';
 
 // Addis Ababa blocks the seed data lives around; picking one avoids asking for a
 // GPS permission just to place a first order.
@@ -14,6 +15,8 @@ const PRESETS = [
 ];
 
 export default function Register() {
+  const styles = useStyles(makeStyles);
+  const { t } = useI18n();
   const { register } = useSession();
   const router = useRouter();
   const [name, setName] = useState('');
@@ -45,35 +48,53 @@ export default function Register() {
   return (
     <Screen>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingBottom: space.xxl }}>
-          <Text style={type.eyebrow}>New account</Text>
-          <Text style={[type.h1, { marginVertical: space.sm }]}>Two minutes to your first order.</Text>
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <View style={styles.form}>
+            <Text style={type.eyebrow}>{t('register.eyebrow')}</Text>
+            <Text style={[type.h1, styles.title]}>{t('register.title')}</Text>
+            <Text style={[type.small, styles.intro]}>{t('auth.registerIntro')}</Text>
 
-          <Notice text={error} />
-          <Field label="Name" value={name} onChangeText={setName} />
-          <Field label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="09…" />
-          <Field label="Password" value={password} onChangeText={setPassword} secure placeholder="at least 6 characters" />
+            <Notice text={error} />
+            <Field icon="person" label={t('auth.name')} value={name} onChangeText={setName} />
+            <Field
+              icon="phone"
+              label={t('auth.phone')}
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+              placeholder={t('register.phoneHint')}
+            />
+            <Field
+              icon="lock"
+              label={t('auth.password')}
+              value={password}
+              onChangeText={setPassword}
+              secure
+              placeholder={t('register.passwordHint')}
+            />
 
-          <Text style={[type.eyebrow, { marginBottom: space.sm }]}>Delivery area</Text>
-          <View style={styles.presets}>
-            {PRESETS.map((p) => (
-              <Text
-                key={p.label}
-                onPress={() => setPreset(p)}
-                style={[styles.preset, preset.label === p.label && styles.presetOn]}
-              >
-                {p.label}
-              </Text>
-            ))}
-          </View>
-          <Text style={[type.small, { marginBottom: space.md }]}>{preset.line}</Text>
+            <Text style={[type.eyebrow, styles.areaLabel]}>{t('register.area')}</Text>
+            <View style={styles.presets}>
+              {PRESETS.map((p) => (
+                <Pressable
+                  key={p.label}
+                  accessibilityRole="button"
+                  onPress={() => setPreset(p)}
+                  style={[styles.preset, preset.label === p.label && styles.presetOn]}
+                >
+                  <Text style={[styles.presetText, preset.label === p.label && styles.presetTextOn]}>{p.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={[type.small, styles.presetLine]}>{preset.line}</Text>
 
-          <Button label="Create account" onPress={submit} loading={busy} />
-          <View style={styles.alt}>
-            <Text style={type.small}>Already registered? </Text>
-            <Link href="/login" style={styles.link}>
-              Sign in
-            </Link>
+            <Button label={t('auth.register')} onPress={submit} loading={busy} icon="next" />
+            <View style={styles.alt}>
+              <Text style={type.small}>{t('register.haveAccount')} </Text>
+              <Link href="/login" style={styles.link}>
+                {t('auth.signIn')}
+              </Link>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -81,18 +102,25 @@ export default function Register() {
   );
 }
 
-const styles = StyleSheet.create({
-  presets: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' },
-  preset: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    fontSize: 14,
-    color: colors.muted
-  },
-  presetOn: { borderColor: colors.ink, color: colors.ink, fontWeight: '700', backgroundColor: colors.tint },
-  alt: { flexDirection: 'row', justifyContent: 'center', marginTop: space.lg },
-  link: { color: colors.accentInk, fontWeight: '700' }
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    scroll: { flexGrow: 1, justifyContent: 'center', paddingVertical: space.xxl },
+    form: { width: '100%', maxWidth: 400, alignSelf: 'center' },
+    title: { marginTop: space.xs },
+    intro: { marginBottom: space.xl, lineHeight: 21 },
+    areaLabel: { marginTop: space.md, marginBottom: space.sm },
+    presets: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' },
+    preset: {
+      borderWidth: 1,
+      borderColor: colors.line,
+      borderRadius: radius.pill,
+      paddingHorizontal: 14,
+      paddingVertical: 8
+    },
+    presetOn: { borderColor: colors.ink, backgroundColor: colors.tint },
+    presetText: { fontSize: 14, color: colors.muted },
+    presetTextOn: { color: colors.ink, fontWeight: '700' },
+    presetLine: { marginTop: space.sm, marginBottom: space.md },
+    alt: { flexDirection: 'row', justifyContent: 'center', marginTop: space.lg },
+    link: { color: colors.accentInk, fontWeight: '700' }
+  });

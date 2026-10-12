@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { api } from '../../../shared/api';
+import { Icon } from '../../../shared/brand';
+import { useI18n } from '../../../shared/lang';
 import { useSession } from '../../../shared/session';
-import { colors, space, type } from '../../../shared/theme';
-import { Button, Card, Chip, Field, Notice, Screen } from '../../../shared/ui';
+import { colors, radius, space, type, useStyles } from '../../../shared/theme';
+import { Button, Card, Chip, Field, Notice, Screen, Setting } from '../../../shared/ui';
 
 const AREAS = [
   { label: 'Bole', lat: 8.9973, lng: 38.7873 },
@@ -13,7 +16,10 @@ const AREAS = [
 ];
 
 export default function Account() {
+  const styles = useStyles(makeStyles);
+  const { t } = useI18n();
   const { user, setUser, logout } = useSession();
+  const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState('');
   const [line, setLine] = useState('');
   const [area, setArea] = useState(AREAS[0]);
@@ -34,6 +40,7 @@ export default function Account() {
       setUser(data.user);
       setLabel('');
       setLine('');
+      setAdding(false);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -47,69 +54,109 @@ export default function Account() {
   };
 
   return (
-    <Screen style={{ paddingHorizontal: 0 }}>
-      <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl }}>
-        <Card>
-          <Text style={type.h1}>{user.name}</Text>
-          <Text style={[type.small, { marginTop: 4 }]}>{user.phone}</Text>
-          <View style={{ marginTop: space.md }}>
-            <Chip label={`${user.role} account`} />
+    <Screen>
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <Card style={styles.profile}>
+          <View style={styles.avatar}>
+            <Text style={styles.initial}>{(user?.name || '?').trim().charAt(0).toUpperCase()}</Text>
           </View>
+          <View style={{ flex: 1 }}>
+            <Text style={type.h2}>{user?.name}</Text>
+            <Text style={[type.small, { marginTop: 2 }]}>{user?.phone}</Text>
+          </View>
+          <Chip label={t('account.role', { role: user?.role })} icon="person" />
         </Card>
 
-        <Text style={[type.eyebrow, { marginTop: space.xl, marginBottom: space.sm }]}>Saved addresses</Text>
-        {user.addresses?.length ? (
+        <Card style={[styles.block, styles.menu]}>
+          <Setting
+            icon="card"
+            label={t('pay.title')}
+            value={user?.paymentMethods?.length ? t('common.count', { count: user.paymentMethods.length }) : t('pay.empty')}
+            onPress={() => router.push('/payment')}
+          />
+          <Setting icon="settings" label={t('set.title')} onPress={() => router.push('/settings')} />
+          <Setting
+            icon="pin"
+            label={t('account.savedAddresses')}
+            value={user?.addresses?.length ? t('common.count', { count: user.addresses.length }) : t('account.noAddress')}
+            onPress={() => setAdding((open) => !open)}
+          />
+        </Card>
+
+        <Notice text={error} />
+
+        {user?.addresses?.length ? (
           user.addresses.map((a) => (
             <Card key={a.id} style={styles.address}>
               <View style={{ flex: 1 }}>
-                <Text style={[type.body, { fontWeight: '700' }]}>{a.label}</Text>
+                <Text style={type.body}>{a.label}</Text>
                 <Text style={type.small}>
                   {a.line}, {a.city} · {a.lat.toFixed(4)}, {a.lng.toFixed(4)}
                 </Text>
               </View>
-              <Text onPress={() => remove(a.id)} style={styles.remove}>
-                Remove
-              </Text>
+              <Pressable hitSlop={8} onPress={() => remove(a.id)} accessibilityRole="button" accessibilityLabel={t('account.remove')}>
+                <Icon name="trash" size={18} color={colors.faint} />
+              </Pressable>
             </Card>
           ))
-        ) : (
-          <Notice text="No address saved yet — add one below to check out." tone="success" />
-        )}
+        ) : null}
 
-        <Card style={{ marginTop: space.xl }}>
-          <Text style={type.eyebrow}>Add an address</Text>
-          <Notice text={error} />
-          <View style={styles.areas}>
-            {AREAS.map((a) => (
-              <Text key={a.label} onPress={() => setArea(a)} style={[styles.area, area.label === a.label && styles.areaOn]}>
-                {a.label}
-              </Text>
-            ))}
-          </View>
-          <Field label="Label" value={label} onChangeText={setLabel} placeholder="Home, Work…" />
-          <Field label="Street / building" value={line} onChangeText={setLine} placeholder="Rome St, near Gate B" />
-          <Text style={type.mono}>{`coords ${area.lat}, ${area.lng}`}</Text>
-          <Button label="Save address" onPress={addAddress} loading={busy} style={{ marginTop: space.md }} />
-        </Card>
+        {adding ? (
+          <Card style={styles.block}>
+            <Text style={type.eyebrow}>{t('account.addAddress')}</Text>
+            <View style={styles.areas}>
+              {AREAS.map((a) => (
+                <Pressable key={a.label} onPress={() => setArea(a)} accessibilityRole="button" style={[styles.area, area.label === a.label && styles.areaOn]}>
+                  <Text style={[styles.areaText, area.label === a.label && styles.areaTextOn]}>{a.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Field label={t('account.addressLabel')} value={label} onChangeText={setLabel} placeholder={t('account.addressLabelHint')} />
+            <Field label={t('account.street')} value={line} onChangeText={setLine} placeholder={t('account.streetHint')} />
+            <Text style={type.mono}>{`${area.lat}, ${area.lng}`}</Text>
+            <Button label={t('account.saveAddress')} icon="check" onPress={addAddress} loading={busy} style={{ marginTop: space.md }} />
+          </Card>
+        ) : null}
 
-        <Button label="Sign out" variant="ghost" onPress={logout} style={{ marginTop: space.xl }} />
+        <Button
+          label={t('auth.signOut')}
+          icon="logout"
+          variant="ghost"
+          onPress={logout}
+          style={{ marginTop: space.xl }}
+        />
       </ScrollView>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  address: { marginTop: space.sm, flexDirection: 'row', gap: space.md, alignItems: 'center' },
-  remove: { color: colors.accentInk, fontWeight: '700', fontSize: 13 },
-  areas: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginVertical: space.md },
-  area: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    fontSize: 13,
-    color: colors.muted
-  },
-  areaOn: { borderColor: colors.ink, color: colors.ink, fontWeight: '700', backgroundColor: colors.tint }
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    scroll: { paddingVertical: space.lg, paddingBottom: space.xxl },
+    profile: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+    avatar: {
+      width: 46,
+      height: 46,
+      borderRadius: 23,
+      backgroundColor: colors.tint,
+      borderWidth: 1,
+      borderColor: colors.line,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    initial: { fontSize: 19, fontWeight: '800', color: colors.ink },
+    block: { marginTop: space.md },
+    menu: { paddingVertical: space.xs },
+    address: { marginTop: space.sm, flexDirection: 'row', gap: space.md, alignItems: 'center' },
+    areas: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginVertical: space.md },
+    area: {
+      borderWidth: 1,
+      borderColor: colors.line,
+      borderRadius: radius.pill,
+      paddingHorizontal: 12,
+      paddingVertical: 7
+    },
+    areaOn: { borderColor: colors.ink, backgroundColor: colors.tint },
+    areaText: { fontSize: 13, color: colors.muted },
+    areaTextOn: { color: colors.ink, fontWeight: '700' }
+  });

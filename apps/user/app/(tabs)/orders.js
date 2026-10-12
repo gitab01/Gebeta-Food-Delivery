@@ -1,18 +1,35 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { api, etb } from '../../../shared/api';
-import { LABEL } from '../../../shared/status';
-import { colors, space, type } from '../../../shared/theme';
-import { Card, Chip, Empty, Loading, Screen, StatusChip } from '../../../shared/ui';
+import { useI18n } from '../../../shared/lang';
+import { Icon } from '../../../shared/brand';
+import { Schematic } from '../../../shared/map/Schematic';
+import { colors, radius, space, type, useStyles } from '../../../shared/theme';
+import { Card, Chip, Empty, Loading, Notice, Screen, StatusChip } from '../../../shared/ui';
 
-const SCOPES = [
-  { key: 'active', label: 'Live' },
-  { key: 'done', label: 'Delivered' },
-  { key: 'all', label: 'All' }
-];
+const SCOPES = ['active', 'done', 'all'];
+
+/** A route preview on every history row: the same projection the tracker uses, drawn small. */
+function RouteThumb({ order }) {
+  const styles = useStyles(makeStyles);
+  return (
+    <View style={styles.thumb}>
+      <Schematic
+        compact
+        pickup={order.restaurantLocation}
+        dropoff={order.deliveryAddress?.lat != null ? order.deliveryAddress : null}
+        courier={order.courierLocation}
+        status={order.status}
+        height={92}
+      />
+    </View>
+  );
+}
 
 export default function Orders() {
+  const styles = useStyles(makeStyles);
+  const { t } = useI18n();
   const router = useRouter();
   const [scope, setScope] = useState('active');
   const [orders, setOrders] = useState([]);
@@ -37,56 +54,63 @@ export default function Orders() {
   }, [load]);
 
   return (
-    <Screen style={{ paddingHorizontal: 0 }}>
+    <Screen>
       <View style={styles.header}>
-        <Text style={type.h1}>Your orders</Text>
+        <Text style={type.h1}>{t('orders.title')}</Text>
         <View style={styles.scopes}>
-          {SCOPES.map((s) => (
-            <Text
-              key={s.key}
-              onPress={() => setScope(s.key)}
-              style={[styles.scope, scope === s.key && styles.scopeOn]}
-            >
-              {s.label}
-            </Text>
+          {SCOPES.map((key) => (
+            <Pressable key={key} onPress={() => setScope(key)} accessibilityRole="button" style={[styles.scope, scope === key && styles.scopeOn]}>
+              <Text style={[styles.scopeText, scope === key && styles.scopeTextOn]}>{t(`orders.scope.${key}`)}</Text>
+            </Pressable>
           ))}
         </View>
-        {error ? <Text style={[type.small, { color: colors.accentInk, marginTop: space.sm }]}>{error}</Text> : null}
       </View>
 
+      <Notice text={error} />
+
       {busy && !orders.length ? (
-        <Loading label="Loading orders" />
+        <Loading label={t('common.loading')} />
       ) : (
         <FlatList
           data={orders}
           keyExtractor={(o) => o.id}
-          contentContainerStyle={{ paddingHorizontal: space.lg, paddingBottom: space.xxl }}
+          contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={busy} onRefresh={load} tintColor={colors.muted} />}
-          ListEmptyComponent={<Empty title="Nothing here" body="Order from a kitchen and it will appear with live status." />}
+          ListEmptyComponent={<Empty icon="orders" title={t('orders.empty')} body={t('orders.emptyBody')} />}
           renderItem={({ item }) => (
-            <Card style={styles.row} onPress={() => router.push(`/track/${item.id}`)}>
+            <Card onPress={() => router.push(`/track/${item.id}`)}>
               <View style={styles.rowTop}>
                 <View style={{ flex: 1 }}>
-                  <Text style={[type.h2]}>{item.restaurantName}</Text>
+                  <Text style={type.h2} numberOfLines={1}>
+                    {item.restaurantName}
+                  </Text>
                   <Text style={type.small}>
-                    {item.items.reduce((n, i) => n + i.qty, 0)} items · {etb(item.totalCents)}
+                    {t('history.items', { count: item.items.reduce((n, i) => n + i.qty, 0) })} · {etb(item.totalCents)}
                   </Text>
                 </View>
-                <StatusChip status={item.status} label={LABEL[item.status]} />
+                <StatusChip status={item.status} label={t(`st.${item.status}`)} />
               </View>
+
+              <RouteThumb order={item} />
+
               {item.eta?.reason ? (
                 <View style={styles.eta}>
-                  <Chip tone="accent" label={`${item.eta.minutes} min`} />
+                  <Chip tone="accent" label={t('common.minutes', { n: item.eta.minutes })} icon="clock" />
                   <Text style={[type.small, { flex: 1 }]} numberOfLines={2}>
                     {item.eta.reason}
                   </Text>
                 </View>
               ) : null}
-              {item.courierName ? <Text style={[type.small, { marginTop: 6 }]}>Courier: {item.courierName}</Text> : null}
+
+              {item.courierName ? (
+                <View style={styles.courier}>
+                  <Icon name="jobs" size={15} color={colors.muted} />
+                  <Text style={type.small}>{item.courierName}</Text>
+                </View>
+              ) : null}
+
               {item.cancelReason || item.rejectReason ? (
-                <Text style={[styles.reason, { color: colors.accentInk }]}>
-                  {item.cancelReason || item.rejectReason}
-                </Text>
+                <Text style={styles.reason}>{item.cancelReason || item.rejectReason}</Text>
               ) : null}
             </Card>
           )}
@@ -96,21 +120,30 @@ export default function Orders() {
   );
 }
 
-const styles = StyleSheet.create({
-  header: { paddingHorizontal: space.lg, paddingBottom: space.md },
-  scopes: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
-  scope: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    fontSize: 13,
-    color: colors.muted
-  },
-  scopeOn: { borderColor: colors.ink, color: colors.ink, fontWeight: '700', backgroundColor: colors.tint },
-  row: { marginBottom: space.md },
-  rowTop: { flexDirection: 'row', gap: space.md, alignItems: 'flex-start' },
-  eta: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.md },
-  reason: { marginTop: space.sm, fontSize: 13, fontWeight: '600' }
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    header: { paddingBottom: space.md },
+    scopes: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
+    scope: {
+      borderWidth: 1,
+      borderColor: colors.line,
+      borderRadius: radius.pill,
+      paddingHorizontal: 14,
+      paddingVertical: 7
+    },
+    scopeOn: { borderColor: colors.ink, backgroundColor: colors.tint },
+    scopeText: { fontSize: 13, color: colors.muted },
+    scopeTextOn: { color: colors.ink, fontWeight: '700' },
+    list: { gap: space.md, paddingBottom: space.xxl },
+    rowTop: { flexDirection: 'row', gap: space.md, alignItems: 'flex-start' },
+    thumb: {
+      marginTop: space.md,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.line,
+      overflow: 'hidden'
+    },
+    eta: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.md },
+    courier: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: space.sm },
+    reason: { marginTop: space.sm, fontSize: 13, fontWeight: '600', color: colors.accentInk }
+  });

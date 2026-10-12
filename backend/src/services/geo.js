@@ -26,4 +26,17 @@ function travelMinutes(meters, vehicle = 'motorbike', bufferMinutes = 3) {
 const point = (lat, lng) => ({ type: 'Point', coordinates: [lng, lat] });
 const coordsToLatLng = (coordinates) => ({ lat: coordinates[1], lng: coordinates[0] });
 
-module.exports = { distanceMeters, travelMinutes, point, coordsToLatLng, SPEED_KMH };
+/** Null island is what a device reports before it has a fix, so it is never a position. */
+function isPlausible({ lat, lng }) {
+  const a = Number(lat);
+  const b = Number(lng);
+  return (
+    Number.isFinite(a) &&
+    Number.isFinite(b) &&
+    Math.abs(a) <= 90 &&
+    Math.abs(b) <= 180 &&
+    (a !== 0 || b !== 0)
+  );
+}
+
+module.exports = { distanceMeters, travelMinutes, point, coordsToLatLng, isPlausible, SPEED_KMH };

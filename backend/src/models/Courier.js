@@ -6,6 +6,9 @@ const courierSchema = new mongoose.Schema(
     name: { type: String, default: '' },
     phone: { type: String, default: '' },
     vehicle: { type: String, enum: ['foot', 'bicycle', 'motorbike', 'car'], default: 'motorbike' },
+    licencePlate: { type: String, default: '' },
+    insuranceProvider: { type: String, default: '' },
+    insuranceExpiresAt: Date,
     isOnline: { type: Boolean, default: false, index: true },
     activeOrders: { type: Number, default: 0 },
     lastKnownLocation: {

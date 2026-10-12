@@ -20,6 +20,15 @@ const publicUser = (user) => ({
     lat: a.lat,
     lng: a.lng,
     contactPhone: a.contactPhone || user.phone
+  })),
+  paymentMethods: (user.paymentMethods || []).map((m) => ({
+    id: String(m._id),
+    brand: m.brand,
+    label: m.label || '',
+    last4: m.last4 || '',
+    expiryMonth: m.expiryMonth ?? null,
+    expiryYear: m.expiryYear ?? null,
+    isDefault: Boolean(m.isDefault)
   }))
 });
 
@@ -112,6 +121,83 @@ router.delete(
     const address = req.user.addresses.id(req.params.addressId);
     if (!address) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Address not found' } });
     address.deleteOne();
+    await req.user.save();
+    res.json({ user: publicUser(req.user) });
+  })
+);
+
+const BRANDS = ['card', 'telebirr', 'cbebir', 'cash'];
+
+/**
+ * These endpoints store a *choice*, never card data. A request that carries anything
+ * resembling a PAN is refused outright - it is not saved, not echoed back, and not
+ * passed on - because the gateway is the only component allowed to see one.
+ */
+router.post(
+  '/me/payment-methods',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    if (body.number || body.cardNumber || body.pan || body.cvv) {
+      return res.status(400).json({
+        error: { code: 'CARD_DATA_NOT_ACCEPTED', message: 'Do not send a card number. Save the brand and the last four digits only.' }
+      });
+    }
+    const { brand, label = '', last4 = '', expiryMonth, expiryYear } = body;
+    if (!BRANDS.includes(brand)) {
+      return res.status(400).json({ error: { code: 'VALIDATION', message: `brand must be one of ${BRANDS.join(', ')}` } });
+    }
+    const digits = String(last4).trim();
+    if (brand === 'card') {
+      if (!/^\d{4}$/.test(digits)) {
+        return res.status(400).json({ error: { code: 'VALIDATION', message: 'A saved card stores exactly the last 4 digits' } });
+      }
+      const month = Number(expiryMonth);
+      const year = Number(expiryYear);
+      if (!(month >= 1 && month <= 12) || !(year >= 2020 && year <= 2100)) {
+        return res.status(400).json({ error: { code: 'VALIDATION', message: 'expiryMonth (1-12) and expiryYear are required for a card' } });
+      }
+    }
+    if (req.user.paymentMethods.some((m) => m.brand === brand && (m.last4 || '') === digits && (m.label || '') === String(label).trim())) {
+      return res.status(409).json({ error: { code: 'ALREADY_SAVED', message: 'That payment method is already saved' } });
+    }
+
+    const first = req.user.paymentMethods.length === 0;
+    if (!first) req.user.paymentMethods.forEach((m) => { m.isDefault = false; });
+    req.user.paymentMethods.push({
+      brand,
+      label: String(label).slice(0, 40),
+      last4: brand === 'card' ? digits : '',
+      expiryMonth: brand === 'card' ? Number(expiryMonth) : undefined,
+      expiryYear: brand === 'card' ? Number(expiryYear) : undefined,
+      isDefault: first
+    });
+    await req.user.save();
+    res.status(201).json({ user: publicUser(req.user) });
+  })
+);
+
+router.patch(
+  '/me/payment-methods/:methodId/default',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const method = req.user.paymentMethods.id(req.params.methodId);
+    if (!method) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Payment method not found' } });
+    req.user.paymentMethods.forEach((m) => { m.isDefault = String(m._id) === String(method._id); });
+    await req.user.save();
+    res.json({ user: publicUser(req.user) });
+  })
+);
+
+router.delete(
+  '/me/payment-methods/:methodId',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const method = req.user.paymentMethods.id(req.params.methodId);
+    if (!method) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Payment method not found' } });
+    const wasDefault = method.isDefault;
+    method.deleteOne();
+    if (wasDefault && req.user.paymentMethods.length) req.user.paymentMethods[0].isDefault = true;
     await req.user.save();
     res.json({ user: publicUser(req.user) });
   })

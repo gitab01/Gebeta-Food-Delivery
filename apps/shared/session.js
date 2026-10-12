@@ -25,6 +25,11 @@ const writeStored = (value) => {
 
 const SessionContext = createContext(null);
 
+// Screens mount before this provider's effect runs, so the token has to be on the API
+// client already - otherwise a deep link into the tracker asks for it and never retries.
+const boot = readStored();
+if (boot?.token) setToken(boot.token);
+
 export function SessionProvider({ children }) {
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);

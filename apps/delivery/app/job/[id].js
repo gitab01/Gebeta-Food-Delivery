@@ -2,41 +2,47 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { api, etb, km, realtime } from '../../../shared/api';
-import { LABEL } from '../../../shared/status';
-import { colors, space, type } from '../../../shared/theme';
-import { Button, Card, Empty, Loading, Notice, Row, Screen, StatusChip } from '../../../shared/ui';
-import { sendDevicePosition } from '../../lib/location';
-
-/** The two confirmations a courier can make, each guarded by a proximity check on the server. */
-const STEP = {
-  ASSIGNED: { action: 'courierPickup', label: 'I have collected the food', need: 'Confirm only at the restaurant door — your last position is checked against it.' },
-  READY: { action: 'courierPickup', label: 'Collect the ready order', need: 'The kitchen says it is ready. Confirm once you are at the counter.' },
-  PREPARING: { need: 'The kitchen is still cooking. Wait at the counter, or watch the ETA update as it moves.' },
-  PICKED_UP: { action: 'courierDeliver', label: 'Delivered to the customer', need: 'Confirm at the door — your last position is checked against the drop-off.' },
-  DELIVERED: { need: 'Handed over. The customer rates the trip and the fare settles.' }
-};
+import { LiveMap } from '../../../shared/map/LiveMap';
+import { Icon } from '../../../shared/brand';
+import { useI18n } from '../../../shared/lang';
+import { colors, radius, space, type, useStyles } from '../../../shared/theme';
+import { useViewport } from '../../../shared/responsive';
+import { Button, Card, Chip, Empty, Loading, Notice, Row, Screen, StatusChip } from '../../../shared/ui';
+import { sendDevicePosition, useReportedPosition } from '../../lib/location';
 
 export default function JobDetail() {
+  const styles = useStyles(makeStyles);
+  const { t } = useI18n();
+  const { size } = useViewport();
   const { id } = useLocalSearchParams();
   const [job, setJob] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState('');
   const [loading, setLoading] = useState(true);
+  const reported = useReportedPosition();
+
+  /** The two confirmations a courier can make, each guarded by a proximity check on the server. */
+  const STEP = {
+    ASSIGNED: { action: 'courierPickup', label: t('job.collect'), hint: t('job.hintPickup') },
+    READY: { action: 'courierPickup', label: t('job.collectReady'), hint: t('job.hintReady') },
+    PREPARING: { hint: t('job.hintWaiting') },
+    PICKED_UP: { action: 'courierDeliver', label: t('job.deliver'), hint: t('job.hintDeliver') },
+    DELIVERED: { hint: t('job.hintHanded') }
+  };
 
   const load = useCallback(async () => {
     try {
       const [active, history] = await Promise.all([api.courierJobs('active'), api.courierJobs('history')]);
       const found = [...active.jobs, ...history.jobs].find((j) => j.id === id);
       setJob(found || null);
-      if (!found) setError('This job is no longer yours.');
-      else setError('');
+      setError(found ? '' : t('job.notYours'));
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     load();
@@ -50,11 +56,26 @@ export default function JobDetail() {
     const onClosed = (payload) => {
       if (payload.orderId === id) load();
     };
+    const join = () => socket.emit('order:join', { orderId: id });
+    const onLocation = (payload) => {
+      if (payload?.lat == null) return;
+      setJob((current) => {
+        if (!current || current.id !== id) return current;
+        const trail = [...(current.courierTrail || []), { lat: payload.lat, lng: payload.lng, at: payload.at }];
+        return { ...current, courierLocation: { lat: payload.lat, lng: payload.lng, at: payload.at }, courierTrail: trail.slice(-150) };
+      });
+    };
+    if (socket.connected) join();
+    socket.on('connect', join);
     socket.on('courier:job', onJob);
     socket.on('courier:job:closed', onClosed);
+    socket.on('courier:location', onLocation);
     return () => {
+      socket.off('connect', join);
       socket.off('courier:job', onJob);
       socket.off('courier:job:closed', onClosed);
+      socket.off('courier:location', onLocation);
+      socket.emit('order:leave', { orderId: id });
     };
   }, [id, load]);
 
@@ -66,128 +87,146 @@ export default function JobDetail() {
     try {
       const data = await api[step.action](job.id);
       setJob(data.order);
-      setDone(step.action === 'courierDeliver' ? 'Delivered. The customer can now rate the trip.' : 'Collected. Head to the drop-off.');
+      setDone(step.action === 'courierDeliver' ? t('job.delivered') : t('job.collected'));
     } catch (err) {
-      if (err.code === 'NOT_AT_LOCATION') {
-        setError(`${err.message} Send your position again if your phone has moved since.`);
-      } else if (err.code === 'LOCATION_REQUIRED') {
-        setError('Your position has not reached the server yet. Use “Send my position” below.');
-      } else {
-        setError(err.message);
-      }
+      if (err.code === 'NOT_AT_LOCATION') setError(`${err.message} ${t('job.notAtStop')}`);
+      else if (err.code === 'LOCATION_REQUIRED') setError(t('job.needPosition'));
+      else setError(err.message);
     } finally {
       setBusy(false);
     }
   };
 
-  if (loading) return <Loading label="Opening the job" />;
+  if (loading) return <Loading label={t('job.opening')} />;
   if (!job) {
     return (
       <Screen>
         <Notice text={error} />
-        <Empty title="Job not on your board" body="It was handed back, cancelled, or completed by another courier." />
+        <Empty title={t('job.notOnBoard')} body={t('job.notOnBoardBody')} icon="jobs" />
       </Screen>
     );
   }
 
   const step = STEP[job.status] || {};
-  const job_ = job.job || {};
+  const detail = job.job || {};
+  const stop = (letter, tone, glyph, label, lines, phone, phoneLabel) => (
+    <View style={styles.stop}>
+      <View style={[styles.pin, { backgroundColor: tone }]}>
+        <Text style={[styles.pinGlyph, { color: glyph }]}>{letter}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={type.eyebrow}>{label}</Text>
+        {lines.filter(Boolean).map((line, index) => (
+          <Text key={line} style={index === 0 ? type.body : type.small}>
+            {line}
+          </Text>
+        ))}
+        {phone ? (
+          <Button
+            narrow
+            variant="quiet"
+            icon="phone"
+            label={phoneLabel}
+            onPress={() => Linking.openURL(`tel:${phone}`)}
+            style={{ marginTop: space.sm }}
+          />
+        ) : null}
+      </View>
+    </View>
+  );
 
   return (
-    <Screen style={{ paddingHorizontal: 0, paddingTop: 0 }}>
-      <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl }}>
+    <Screen>
+      <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.head}>
           <View style={{ flex: 1 }}>
             <Text style={type.eyebrow}>#{String(job.id).slice(-6)}</Text>
             <Text style={type.h1}>{job.restaurantName}</Text>
           </View>
-          <StatusChip status={job.status} label={LABEL[job.status]} />
+          <StatusChip status={job.status} label={t(`st.${job.status}`)} />
         </View>
 
         <Notice text={error} />
         <Notice tone="success" text={done} />
 
-        <Card style={{ marginTop: space.lg }}>
-          <View style={styles.stop}>
-            <Text style={[styles.pin, { color: colors.accent }]}>P</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={type.eyebrow}>Pick up</Text>
-              <Text style={type.body}>{job_.pickup?.name}</Text>
-              <Text style={type.small}>{job_.pickup?.address}</Text>
-              {job_.pickup?.phone ? (
-                <Text style={styles.phone} onPress={() => Linking.openURL(`tel:${job_.pickup.phone}`)}>
-                  call the kitchen · {job_.pickup.phone}
-                </Text>
-              ) : null}
-            </View>
-          </View>
+        <Card style={{ marginTop: space.md }}>
+          <LiveMap
+            pickup={detail.pickup?.lat != null ? { lat: detail.pickup.lat, lng: detail.pickup.lng, label: detail.pickup.name } : null}
+            dropoff={detail.dropoff?.lat != null ? { lat: detail.dropoff.lat, lng: detail.dropoff.lng, label: t('track.dropoff') } : null}
+            courier={(() => {
+              if (reported.lat != null) return { lat: reported.lat, lng: reported.lng, at: reported.at, label: job.courier?.name };
+              const trail = job.courierTrail || [];
+              const last = trail[trail.length - 1];
+              return last?.lat != null ? { ...last, label: job.courier?.name } : null;
+            })()}
+            trail={job.courierTrail || []}
+            status={job.status}
+            height={size === 'phone' ? 210 : 280}
+          />
+          <Text style={[type.small, { marginTop: space.md }]}>{t('job.map')}</Text>
+        </Card>
 
-          <View style={[styles.rule, {}]} />
-
-          <View style={styles.stop}>
-            <Text style={[styles.pin, { color: colors.green }]}>D</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={type.eyebrow}>Drop off · {job_.customerName || 'customer'}</Text>
-              {job_.addressVisible ? (
-                <>
-                  <Text style={type.body}>{job_.dropoff?.line}</Text>
-                  <Text style={type.small}>{job_.dropoff?.city}</Text>
-                  {job_.dropoff?.contactPhone ? (
-                    <Text style={styles.phone} onPress={() => Linking.openURL(`tel:${job_.dropoff.contactPhone}`)}>
-                      call the customer · {job_.dropoff.contactPhone}
-                    </Text>
-                  ) : null}
-                </>
-              ) : (
-                <Text style={type.small}>The address appears once you have collected the food.</Text>
-              )}
-            </View>
-          </View>
+        <Card style={{ marginTop: space.md }}>
+          {stop(
+            'K',
+            colors.ink,
+            colors.paper,
+            `${t('job.pickupAt')} · ${detail.pickup?.name || ''}`,
+            [detail.pickup?.address],
+            detail.pickup?.phone,
+            t('job.callKitchen')
+          )}
+          <View style={styles.rule} />
+          {stop(
+            'D',
+            colors.green,
+            colors.paper,
+            `${t('job.dropAt')} · ${detail.customerName || t('job.customer')}`,
+            detail.addressVisible ? [detail.dropoff?.line, detail.dropoff?.city] : [t('job.addressHidden')],
+            detail.addressVisible ? detail.dropoff?.contactPhone : null,
+            t('job.callCustomer')
+          )}
         </Card>
 
         {job.notes ? (
           <Card style={{ marginTop: space.md }}>
-            <Text style={type.eyebrow}>Customer note</Text>
+            <Text style={type.eyebrow}>{t('job.customerNote')}</Text>
             <Text style={[type.body, { marginTop: 4 }]}>{job.notes}</Text>
           </Card>
         ) : null}
 
         <Card style={{ marginTop: space.md }}>
-          <Row label="Order total" value={etb(job.totalCents)} />
-          <Row label="Your fare" value={etb(job_.courierFeeCents)} />
-          <Row label="Trip distance" value={km(job_.distanceMeters) || '—'} />
-          <Row
-            label="Arrive by"
-            value={job.eta?.minutes != null ? `${job.eta.minutes} min` : '—'}
-          />
+          <Row label={t('job.total')} value={etb(job.totalCents)} />
+          <Row label={t('job.yourFare')} value={etb(detail.courierFeeCents)} />
+          <Row label={t('job.distance')} value={km(detail.distanceMeters) || '—'} />
+          <Row label={t('job.arriveBy')} value={job.eta?.minutes != null ? t('common.minutes', { n: job.eta.minutes }) : '—'} />
         </Card>
 
-        {job.eta?.reason ? (
-          <Text style={[type.small, { marginTop: space.sm, color: colors.muted }]}>{job.eta.reason}</Text>
-        ) : null}
+        {job.eta?.reason ? <Text style={[type.small, { marginTop: space.sm }]}>{job.eta.reason}</Text> : null}
 
         <View style={{ marginTop: space.lg, gap: space.sm }}>
-          {step.action ? (
-            <Button label={step.label} onPress={confirm} loading={busy} disabled={busy} />
-          ) : null}
-          {step.need ? <Text style={[type.small, { color: colors.faint }]}>{step.need}</Text> : null}
+          {step.action ? <Button label={step.label} onPress={confirm} loading={busy} disabled={busy} icon="check" /> : null}
+          {step.hint ? <Text style={type.small}>{step.hint}</Text> : null}
 
           {['ASSIGNED', 'PICKED_UP', 'READY'].includes(job.status) ? (
             <Button
-              label="Send my position now"
+              label={t('job.sendPosition')}
               variant="ghost"
+              icon="pin-location"
               onPress={async () => {
                 setError('');
                 setDone('');
                 try {
                   await sendDevicePosition();
-                  setDone('Position sent — confirm the stop again.');
-                } catch (err) {
-                  setError('This device would not give up a position. Set it from the Profile tab instead.');
+                  setDone(t('job.positionSent'));
+                } catch {
+                  setError(t('job.positionFailed'));
                 }
               }}
-              style={{ marginTop: space.sm }}
             />
+          ) : null}
+          {reported.lat != null ? (
+            <Chip tone="green" icon="navigate" label={`${reported.lat.toFixed(4)}, ${reported.lng.toFixed(4)}`} />
           ) : null}
         </View>
       </ScrollView>
@@ -195,10 +234,19 @@ export default function JobDetail() {
   );
 }
 
-const styles = StyleSheet.create({
-  head: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
-  stop: { flexDirection: 'row', gap: space.md },
-  pin: { fontSize: 17, fontWeight: '800', width: 18 },
-  rule: { width: 1, backgroundColor: colors.line, marginLeft: 8, minHeight: 26 },
-  phone: { color: colors.accentInk, fontWeight: '700', fontSize: 14, marginTop: 4 }
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    scroll: { paddingVertical: space.lg, paddingBottom: space.xxl },
+    head: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
+    stop: { flexDirection: 'row', gap: space.md },
+    pin: {
+      width: 26,
+      height: 26,
+      borderRadius: 13,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 2
+    },
+    pinGlyph: { color: '#ffffff', fontSize: 11, fontWeight: '800' },
+    rule: { height: 1, backgroundColor: colors.line, marginVertical: space.md, marginLeft: 12 }
+  });

@@ -4,6 +4,8 @@ const User = require('../models/User');
 const Courier = require('../models/Courier');
 const Restaurant = require('../models/Restaurant');
 const Payment = require('../models/Payment');
+const Settings = require('../models/Settings');
+const bus = require('../realtime/bus');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/error');
 const { transition, refreshEta } = require('../services/orderService');
@@ -200,6 +202,102 @@ router.post(
   '/watchdog/sweep',
   asyncHandler(async (_req, res) => {
     res.json({ orphans: await watchdog.sweep() });
+  })
+);
+
+const SETTINGS_KEYS = [
+  'currency', 'language', 'timezone', 'dateFormat',
+  'mapsEnabled', 'notifyNewOrder', 'notifyCourierOffline', 'maintenanceMode', 'supportContact'
+];
+
+router.get(
+  '/analytics',
+  asyncHandler(async (req, res) => {
+    const days = Math.min(90, Math.max(7, Number(req.query.days) || 14));
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    since.setDate(since.getDate() - (days - 1));
+
+    const settled = { status: { $in: [STATUS.DELIVERED, STATUS.COMPLETED] } };
+    const [placed, revenue, sources, top] = await Promise.all([
+      Order.aggregate([
+        { $match: { placedAt: { $gte: since } } },
+        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$placedAt' } }, orders: { $sum: 1 } } }
+      ]),
+      Order.aggregate([
+        { $match: { ...settled, completedAt: { $gte: since } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: { $ifNull: ['$completedAt', '$deliveredAt'] } } },
+            revenueCents: { $sum: '$totalCents' },
+            orders: { $sum: 1 }
+          }
+        }
+      ]),
+      Payment.aggregate([
+        { $match: { status: 'succeeded', createdAt: { $gte: since } } },
+        { $group: { _id: '$method', payments: { $sum: 1 }, amountCents: { $sum: '$amountCents' } } }
+      ]),
+      Order.aggregate([
+        { $match: { ...settled, completedAt: { $gte: since } } },
+        { $group: { _id: '$restaurantId', revenueCents: { $sum: '$totalCents' }, orders: { $sum: 1 } } },
+        { $sort: { revenueCents: -1 } },
+        { $limit: 5 }
+      ])
+    ]);
+
+    // A chart with missing days reads as an outage, so every day in the window is emitted.
+    const placedByDay = new Map(placed.map((r) => [r._id, r.orders]));
+    const revenueByDay = new Map(revenue.map((r) => [r._id, r]));
+    const series = [];
+    for (let i = 0; i < days; i += 1) {
+      const day = new Date(since.getTime() + i * 864e5).toISOString().slice(0, 10);
+      const row = revenueByDay.get(day);
+      series.push({ day, orders: placedByDay.get(day) || 0, revenueCents: row?.revenueCents || 0, settledOrders: row?.orders || 0 });
+    }
+
+    const kitchens = top.length ? await Restaurant.find({ _id: { $in: top.map((t) => t._id) } }).select('name').lean() : [];
+    const nameById = new Map(kitchens.map((k) => [String(k._id), k.name]));
+
+    res.json({
+      currency: 'ETB',
+      days,
+      since: since.toISOString(),
+      series,
+      sources: sources.map((s) => ({ method: s._id, payments: s.payments, amountCents: s.amountCents })),
+      topRestaurants: top.map((t) => ({
+        restaurantId: String(t._id),
+        name: nameById.get(String(t._id)) || 'Unknown kitchen',
+        orders: t.orders,
+        revenueCents: t.revenueCents
+      })),
+      totals: {
+        revenueCents: revenue.reduce((n, r) => n + r.revenueCents, 0),
+        orders: placed.reduce((n, r) => n + r.orders, 0),
+        settledOrders: revenue.reduce((n, r) => n + r.orders, 0)
+      }
+    });
+  })
+);
+
+router.get(
+  '/settings',
+  asyncHandler(async (_req, res) => {
+    const settings = await Settings.load();
+    res.json({ settings, version: require('../../package.json').version, gateway: env.gateway });
+  })
+);
+
+router.patch(
+  '/settings',
+  asyncHandler(async (req, res) => {
+    const settings = await Settings.load();
+    SETTINGS_KEYS.forEach((key) => {
+      if (req.body?.[key] !== undefined) settings[key] = req.body[key];
+    });
+    await settings.save();
+    bus.notifyAdmin('settings:update', settings.toObject());
+    res.json({ settings: settings.toObject() });
   })
 );
 

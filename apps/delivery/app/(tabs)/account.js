@@ -2,20 +2,23 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { api, etb, km, realtime } from '../../../shared/api';
+import { Icon } from '../../../shared/brand';
+import { useI18n } from '../../../shared/lang';
 import { useSession } from '../../../shared/session';
-import { LABEL } from '../../../shared/status';
-import { colors, space, type } from '../../../shared/theme';
-import { Button, Card, Chip, Field, Loading, Notice, Row, Screen, StatusChip } from '../../../shared/ui';
+import { colors, radius, space, type, useStyles } from '../../../shared/theme';
+import { Button, Card, Chip, Field, Loading, Notice, Row, Screen, Setting, StatusChip } from '../../../shared/ui';
 import { sendDevicePosition, sendPositionOnce } from '../../lib/location';
 
-const age = (iso) => {
-  if (!iso) return null;
+const age = (iso, t) => {
+  if (!iso) return t('profile.never');
   const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  return `${Math.round(seconds / 60)} min ago`;
+  if (seconds < 60) return t('profile.secondsAgo', { seconds });
+  return t('profile.minutesAgo', { minutes: Math.round(seconds / 60) });
 };
 
 export default function Account() {
+  const styles = useStyles(makeStyles);
+  const { t } = useI18n();
   const { user, logout } = useSession();
   const [courier, setCourier] = useState(null);
   const [jobs, setJobs] = useState([]);
@@ -54,17 +57,17 @@ export default function Account() {
     setError('');
     try {
       await sendDevicePosition();
-      setSent('Your device position was sent to the marketplace.');
+      setSent(t('profile.positionSent'));
       load();
-    } catch (err) {
-      setError('No position from this device. Use one of the kitchen positions below.');
+    } catch {
+      setError(t('profile.noDevicePosition'));
     }
   };
 
   const useKitchenPosition = (kitchen) => {
     setSent('');
     sendPositionOnce({ lat: kitchen.lat, lng: kitchen.lng });
-    setSent(`Marked you at ${kitchen.name}.`);
+    setSent(t('profile.atKitchen', { name: kitchen.name }));
     load();
   };
 
@@ -72,74 +75,86 @@ export default function Account() {
     const lat = Number(manual.lat);
     const lng = Number(manual.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      setError('Enter both a latitude and a longitude.');
+      setError(t('profile.needBoth'));
       return;
     }
     setSent('');
     sendPositionOnce({ lat, lng });
-    setSent('Position sent.');
+    setSent(t('profile.positionSent'));
     load();
   };
 
-  if (loading) return <Loading label="Loading your profile" />;
+  if (loading) return <Loading label={t('profile.opening')} />;
 
   return (
-    <Screen style={{ paddingHorizontal: 0, paddingTop: 0 }}>
-      <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl }}>
+    <Screen>
+      <ScrollView contentContainerStyle={styles.scroll}>
         <Notice text={error} />
         <Notice tone="success" text={sent} />
 
-        <Card>
-          <Text style={type.h2}>{courier?.name || user?.name}</Text>
-          <Text style={[type.small, { marginTop: 2 }]}>{user?.phone}</Text>
-          <View style={{ marginTop: space.md }}>
-            <Chip label={courier?.vehicle || 'courier'} tone={courier?.isOnline ? 'green' : 'neutral'} />
+        <Card style={styles.profile}>
+          <View style={styles.avatar}>
+            <Icon name="jobs" size={22} color={colors.muted} />
           </View>
-          <Card style={{ marginTop: space.lg, padding: 0, borderWidth: 0 }}>
-            <Row label="Status" value={<StatusChip status={courier?.isOnline ? 'COMPLETED' : 'CANCELLED'} label={courier?.isOnline ? 'Online' : 'Offline'} />} />
-            <Row label="Active jobs" value={String(courier?.activeOrders ?? jobs.length)} />
-            <Row label="Delivered" value={String(courier?.completedDeliveries || 0)} />
-            <Row label="Last position" value={age(courier?.locationUpdatedAt) || 'never'} />
-          </Card>
+          <View style={{ flex: 1 }}>
+            <Text style={type.h2}>{courier?.name || user?.name}</Text>
+            <Text style={[type.small, { marginTop: 2 }]}>{user?.phone}</Text>
+          </View>
+          <Chip label={courier?.vehicle || t('vehicle.motorbike')} tone={courier?.isOnline ? 'green' : 'neutral'} icon="motorbike" />
         </Card>
 
-        <Text style={[type.eyebrow, { marginTop: space.xl, marginBottom: space.sm }]}>Position</Text>
-        <Text style={[type.small, { marginBottom: space.md }]}>
-          While you are signed in the app reports you every few seconds and the server keeps the fastest useful trail.
-          Confirming a pickup or a delivery is refused unless your last report is within a few hundred metres of the
-          door, so these controls exist for the moments the GPS is not the truth — a basement kitchen, a phone on 3%.
-        </Text>
+        <Card style={[styles.block, styles.menu]}>
+          <Setting icon="motorbike" label={t('vehicle.title')} onPress={() => router.push('/vehicle')} />
+          <Setting icon="settings" label={t('set.title')} onPress={() => router.push('/settings')} />
+        </Card>
 
-        <Button label="Send my device position" variant="ghost" onPress={useDevicePosition} />
+        <Card style={styles.block}>
+          <Row
+            label={t('profile.status')}
+            value={<StatusChip status={courier?.isOnline ? 'COMPLETED' : 'CANCELLED'} label={courier?.isOnline ? t('job.online') : t('job.offline')} />}
+          />
+          <Row label={t('profile.activeJobs')} value={String(courier?.activeOrders ?? jobs.length)} />
+          <Row label={t('profile.delivered')} value={String(courier?.completedDeliveries || 0)} />
+          <Row label={t('profile.lastPosition')} value={age(courier?.locationUpdatedAt, t)} />
+        </Card>
 
-        <Text style={[type.eyebrow, { marginTop: space.lg, marginBottom: space.sm }]}>Or say where you are</Text>
-        {kitchens.map((k) => (
-          <View key={k.id} style={styles.kitchen}>
-            <View style={{ flex: 1 }}>
-              <Text style={type.body}>
-                {k.emoji} {k.name}
-              </Text>
-              <Text style={type.small}>{k.address}</Text>
+        <Card style={styles.block}>
+          <Text style={type.eyebrow}>{t('profile.position')}</Text>
+          <Text style={[type.small, { marginTop: space.sm }]}>{t('profile.positionFoot')}</Text>
+
+          <Button label={t('profile.sendDevice')} variant="ghost" icon="pin-location" onPress={useDevicePosition} style={{ marginTop: space.md }} />
+
+          <Text style={[type.eyebrow, { marginTop: space.lg, marginBottom: space.sm }]}>{t('profile.orSayWhere')}</Text>
+          {kitchens.slice(0, 4).map((k) => (
+            <View key={k.id} style={styles.kitchen}>
+              <View style={{ flex: 1 }}>
+                <Text style={type.body} numberOfLines={1}>
+                  {k.name}
+                </Text>
+                <Text style={type.small} numberOfLines={1}>
+                  {k.address}
+                </Text>
+              </View>
+              <Button narrow variant="quiet" label={t('profile.imHere')} onPress={() => useKitchenPosition(k)} />
             </View>
-            <Button label="I am here" variant="ghost" onPress={() => useKitchenPosition(k)} style={styles.hereButton} />
-          </View>
-        ))}
+          ))}
 
-        <View style={styles.manual}>
-          <Field label="Latitude" value={manual.lat} onChangeText={(v) => setManual({ ...manual, lat: v })} keyboardType="numeric" style={{ flex: 1 }} />
-          <Field label="Longitude" value={manual.lng} onChangeText={(v) => setManual({ ...manual, lng: v })} keyboardType="numeric" style={{ flex: 1 }} />
-        </View>
-        <Button label="Send exact coordinates" variant="ghost" onPress={sendManual} />
+          <View style={styles.manual}>
+            <Field label="Lat" value={manual.lat} onChangeText={(v) => setManual({ ...manual, lat: v })} keyboardType="numeric" style={{ flex: 1 }} />
+            <Field label="Lng" value={manual.lng} onChangeText={(v) => setManual({ ...manual, lng: v })} keyboardType="numeric" style={{ flex: 1 }} />
+          </View>
+          <Button label={t('profile.sendCoords')} variant="ghost" onPress={sendManual} />
+        </Card>
 
         {jobs.length ? (
           <>
-            <Text style={[type.eyebrow, { marginTop: space.xl, marginBottom: space.sm }]}>Open jobs</Text>
+            <Text style={[type.eyebrow, { marginTop: space.xl, marginBottom: space.sm }]}>{t('job.yours', { count: jobs.length })}</Text>
             {jobs.map((job) => (
               <Card key={job.id} style={styles.jobRow} onPress={() => router.push(`/job/${job.id}`)}>
                 <View style={{ flex: 1 }}>
                   <Text style={type.body}>{job.restaurantName}</Text>
                   <Text style={type.small}>
-                    {LABEL[job.status]} · drop-off {km(job.job?.distanceMeters)}
+                    {t(`st.${job.status}`)} · {km(job.job?.distanceMeters)}
                   </Text>
                 </View>
                 <Text style={styles.fee}>{etb(job.job?.courierFeeCents)}</Text>
@@ -148,25 +163,39 @@ export default function Account() {
           </>
         ) : null}
 
-        <View style={{ marginTop: space.xl }}>
-          <Button
-            label="Sign out"
-            variant="danger"
-            onPress={() => {
-              logout();
-              router.replace('/login');
-            }}
-          />
-        </View>
+        <Button
+          label={t('auth.signOut')}
+          icon="logout"
+          variant="danger"
+          onPress={() => {
+            logout();
+            router.replace('/login');
+          }}
+          style={{ marginTop: space.xl }}
+        />
       </ScrollView>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  kitchen: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
-  hereButton: { minWidth: 110 },
-  manual: { flexDirection: 'row', gap: space.md, marginTop: space.lg },
-  jobRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.sm },
-  fee: { fontSize: 17, fontWeight: '800' }
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    scroll: { paddingVertical: space.lg, paddingBottom: space.xxl },
+    profile: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+    avatar: {
+      width: 46,
+      height: 46,
+      borderRadius: radius.md,
+      backgroundColor: colors.tint,
+      borderWidth: 1,
+      borderColor: colors.line,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    block: { marginTop: space.md },
+    menu: { paddingVertical: space.xs },
+    kitchen: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
+    manual: { flexDirection: 'row', gap: space.md, marginTop: space.lg },
+    jobRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.sm },
+    fee: { fontSize: 17, fontWeight: '800' }
+  });

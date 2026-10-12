@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ageMinutes, api, clock, distance, LABEL, money, TERMINAL } from '../api.js';
 import { Badge, Empty, Field, Flow, Kpi, Notice, Panel } from '../components.jsx';
+import { CityMap } from '../citymap.jsx';
 
 /** UI mirror of the server's state machine. The server still refuses anything illegal. */
 const NEXT = {
@@ -42,6 +43,9 @@ export default function Live({ tick, events }) {
   const [openId, setOpenId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState('');
+  const [couriers, setCouriers] = useState([]);
+  const [kitchens, setKitchens] = useState([]);
+  const [mapsOn, setMapsOn] = useState(true);
 
   const load = useCallback(async () => {
     try {
@@ -58,6 +62,39 @@ export default function Live({ tick, events }) {
   useEffect(() => {
     load();
   }, [load, tick]);
+
+  // Positions arrive over the socket, so the roster is read once instead of on every tick.
+  useEffect(() => {
+    let alive = true;
+    Promise.all([api.couriers(), api.restaurants(), api.settings()])
+      .then(([c, r, s]) => {
+        if (!alive) return;
+        setCouriers(c.couriers);
+        setKitchens(r.restaurants);
+        setMapsOn(Boolean(s.settings.mapsEnabled));
+      })
+      .catch((err) => alive && setError(err.message));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!events.length) return;
+    const latest = events[0];
+    if (latest.name === 'courier:location') {
+      const p = latest.payload;
+      setCouriers((rows) => rows.map((c) => (c.id === p.courierId ? { ...c, lat: p.lat, lng: p.lng, locationUpdatedAt: p.at } : c)));
+    }
+    if (latest.name === 'courier:presence') {
+      const p = latest.payload;
+      setCouriers((rows) => rows.map((c) => (c.id === p.id ? { ...c, isOnline: p.isOnline, activeOrders: p.activeOrders } : c)));
+    }
+    if (latest.name === 'restaurant:availability') {
+      const p = latest.payload;
+      setKitchens((rows) => rows.map((k) => (k.id === p.id ? { ...k, isOpen: p.isOpen } : k)));
+    }
+  }, [events]);
 
   useEffect(() => {
     if (!openId) {
@@ -87,11 +124,13 @@ export default function Live({ tick, events }) {
     [orders]
   );
 
+  const positioned = useMemo(() => couriers.filter((c) => c.lat != null).length, [couriers]);
+
   return (
     <>
       <div className="kpis">
         <Kpi label="Orders (24h)" value={stats?.ordersToday ?? '—'} note={`${stats?.activeOrders ?? 0} still in flight`} />
-        <Kpi label="Settled revenue" value={stats ? `${money(stats.revenueCents)} ETB` : '—'} note={`${stats?.settledOrders ?? 0} delivered`} />
+        <Kpi label="Settled revenue" value={stats ? `${money(stats.revenueCents)} ETB` : '—'} note={`${stats?.settledOrders ?? 0} delivered, all time`} />
         <Kpi label="Avg prep" value={stats?.averagePrepMinutes != null ? `${stats.averagePrepMinutes} min` : '—'} note='accept → ready' />
         <Kpi
           label="Couriers"
@@ -104,7 +143,14 @@ export default function Live({ tick, events }) {
 
       <Notice text={error} />
 
-      <div className="split">
+      <Panel
+        title="City"
+        aside={<span className="tiny dim">{positioned} of {couriers.length} couriers positioned</span>}
+      >
+        <CityMap kitchens={kitchens} couriers={couriers} enabled={mapsOn} height={340} />
+      </Panel>
+
+      <div className="split" style={{ marginTop: 20 }}>
         <Panel
           title="Orders"
           scroll
