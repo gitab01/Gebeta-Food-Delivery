@@ -4,8 +4,9 @@ import { Redirect, useRouter } from 'expo-router';
 import { api, etb } from '../../shared/api';
 import { useCart } from '../../shared/cart';
 import { useI18n } from '../../shared/lang';
+import { PayMark } from '../../shared/paybrands';
 import { useSession } from '../../shared/session';
-import { colors, space, type, useStyles } from '../../shared/theme';
+import { colors, radius, space, type, useStyles } from '../../shared/theme';
 import { Button, Card, Chip, Field, Notice, Screen, Setting } from '../../shared/ui';
 
 export default function Checkout() {
@@ -106,7 +107,11 @@ export default function Checkout() {
 
         <Card style={{ marginTop: space.md }}>
           <Setting
-            icon="card"
+            leading={
+              <View style={styles.payTile}>
+                <PayMark brand={method?.brand || 'card'} size={24} color={colors.muted} />
+              </View>
+            }
             label={t('cart.payingWith')}
             value={method ? `${t(`pay.${method.brand}`)}${method.last4 ? ` · ${method.last4}` : ''}` : t('pay.empty')}
             onPress={() => nav.push('/payment')}
@@ -140,6 +145,14 @@ const makeStyles = () =>
     radio: { width: 18, height: 18, borderRadius: 9, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
     radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'transparent' },
     radioOn: { backgroundColor: colors.ink },
+    payTile: {
+      width: 32,
+      height: 32,
+      borderRadius: radius.md,
+      backgroundColor: colors.tint,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
     items: { gap: 4 },
     line: { flexDirection: 'row', gap: space.md, alignItems: 'baseline' },
     rule: { height: 1, backgroundColor: colors.line, marginVertical: space.md },

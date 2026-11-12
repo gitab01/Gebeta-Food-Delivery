@@ -5,9 +5,10 @@
   --faint: #9a9aa2;
   --line: #e8e8ec;
   --tint: #f6f6f8;
-  --accent: #c1121f;
-  --accent-ink: #8c0d18;
-  --accent-tint: #fdecec;
+  --accent: #b0472b;
+  --accent-ink: #8a3520;
+  --accent-tint: #fbece5;
+  --gold: #b3801f;
   --green: #0f7b3f;
   --green-tint: #e9f6ee;
   --amber: #a8620a;
@@ -15,7 +16,7 @@
   --blue: #12467f;
   --blue-tint: #eaf1f9;
   --on-accent: #ffffff;
-  --err-border: #f2c9cc;
+  --err-border: #f0cfc3;
   --ok-border: #bfe3cd;
   --display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
   --body: 'Inter', system-ui, sans-serif;
@@ -31,9 +32,10 @@
   --faint: #6e6e78;
   --line: #26262c;
   --tint: #17171b;
-  --accent: #ff5563;
-  --accent-ink: #ff8a92;
-  --accent-tint: #2a1215;
+  --accent: #e0764f;
+  --accent-ink: #f2a98c;
+  --accent-tint: #2b1611;
+  --gold: #d9a441;
   --green: #4cd48a;
   --green-tint: #10241a;
   --amber: #e8b155;
@@ -41,7 +43,7 @@
   --blue: #7fb0ff;
   --blue-tint: #121c2b;
   --on-accent: #14100f;
-  --err-border: #4a2126;
+  --err-border: #4a2620;
   --ok-border: #1d4432;
 }
 
@@ -81,6 +83,27 @@ button, input, select { font: inherit; color: inherit; }
 
 .login .brand { margin-bottom: 14px; }
 .login .brand svg { width: 34px; height: 34px; }
+
+.login-hero { display: grid; justify-items: center; gap: 10px; margin-bottom: 16px; }
+.login-hero strong { font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); font-weight: 600; }
+
+/* The gebeta arrives once, then keeps steaming. */
+.basket { animation: gebeta-settle 0.56s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+.basket .wisp { fill: none; stroke: var(--muted); stroke-width: 1.7; stroke-linecap: round; opacity: 0; animation: gebeta-steam 3.4s linear infinite; }
+.basket .wisp.two { animation-delay: 1.05s; }
+
+@keyframes gebeta-settle {
+  from { opacity: 0; transform: translateY(12px) scale(0.92); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes gebeta-steam {
+  0% { opacity: 0; transform: translateY(6px); }
+  35% { opacity: 0.55; }
+  100% { opacity: 0; transform: translateY(-8px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .basket, .basket .wisp { animation: none; }
+}
 
 .nav { display: flex; gap: 4px; margin-left: auto; overflow-x: auto; scrollbar-width: none; }
 
@@ -183,14 +206,16 @@ tbody tr:last-child td { border-bottom: 0; }
 
 .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
 .field label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.1px; color: var(--muted); font-weight: 600; }
-.field input, .field select {
+.field input, .field select, .field textarea {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 10px 12px;
   background: var(--paper);
   min-width: 160px;
+  font: inherit;
+  resize: vertical;
 }
-.field input:focus, .field select:focus { outline: 2px solid var(--accent-tint); border-color: var(--accent); }
+.field input:focus, .field select:focus, .field textarea:focus { outline: 2px solid var(--accent-tint); border-color: var(--accent); }
 
 .notice { border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; border: 1px solid; }
 .notice.err { color: var(--accent-ink); background: var(--accent-tint); border-color: var(--err-border); }
@@ -279,6 +304,37 @@ dd { margin: 0; }
 .switch.on { background: var(--green); border-color: var(--green); }
 .switch.on i { transform: translateX(18px); border-color: var(--green); }
 .switch:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* --- courier document review -----------------------------------------------
+   An operator reads somebody's identity card here, so the photo is never cropped,
+   and it enlarges in place instead of opening a second copy of a private image. */
+.docs { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.doc { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: var(--paper); min-width: 0; }
+.doc > b {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.1px;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.doc > b span { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.doc img, .doc .frame {
+  display: block;
+  width: 100%;
+  height: 176px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--tint);
+}
+.doc img { cursor: zoom-in; }
+.doc img.open { height: auto; max-height: 62vh; cursor: zoom-out; }
+.doc .frame { display: grid; place-items: center; padding: 0 10px; color: var(--muted); font-size: 12px; text-align: center; }
+.doc .frame.error { color: var(--accent-ink); }
 
 /* --- city map ------------------------------------------------------------- */
 .citymap { border-radius: 12px; overflow: hidden; background: var(--tint); }

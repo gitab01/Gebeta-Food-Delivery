@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { PAYMENT_BRANDS } = require('../config/brands');
 
 const addressSchema = new mongoose.Schema(
   {
@@ -21,7 +22,7 @@ const addressSchema = new mongoose.Schema(
  */
 const paymentMethodSchema = new mongoose.Schema(
   {
-    brand: { type: String, enum: ['card', 'telebirr', 'cbebir', 'cash'], required: true },
+    brand: { type: String, enum: PAYMENT_BRANDS, required: true },
     label: { type: String, default: '' },
     last4: { type: String, default: '', match: /^\d{0,4}$/ },
     expiryMonth: { type: Number, min: 1, max: 12 },
@@ -41,6 +42,7 @@ const userSchema = new mongoose.Schema(
     addresses: [addressSchema],
     paymentMethods: [paymentMethodSchema],
     isBlocked: { type: Boolean, default: false },
+    phoneVerifiedAt: Date,
     lastLoginAt: Date
   },
   { timestamps: true }
@@ -53,6 +55,16 @@ userSchema.methods.setPassword = function setPassword(plain) {
 userSchema.methods.verifyPassword = function verifyPassword(plain) {
   if (!this.passwordHash) return false;
   return bcrypt.compareSync(plain, this.passwordHash);
+};
+
+/**
+ * The brand this customer will pay with: their default method, or the first one they
+ * saved. Empty when nothing is saved, so the caller falls back to its gateway default
+ * rather than inventing a brand here.
+ */
+userSchema.methods.chosenPaymentBrand = function chosenPaymentBrand() {
+  const saved = this.paymentMethods || [];
+  return (saved.find((method) => method.isDefault) || saved[0])?.brand || '';
 };
 
 userSchema.set('toJSON', {

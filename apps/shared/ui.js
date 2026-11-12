@@ -139,11 +139,12 @@ export function Row({ label, value, style }) {
 }
 
 /** A tappable settings line: icon, label, current value, chevron. */
-export function Setting({ icon, label, value, onPress, right }) {
+export function Setting({ icon, leading, label, value, onPress, right }) {
   const styles = useStyles(makeStyles);
   const body = (
     <View style={styles.setting}>
-      {icon ? (
+      {leading || null}
+      {!leading && icon ? (
         <View style={styles.settingIcon}>
           <Icon name={icon} size={17} color={colors.muted} />
         </View>
@@ -209,6 +210,7 @@ export function Choices({ options, value, onChange, style }) {
             style={[styles.choice, active && styles.choiceActive]}
           >
             {active ? <Icon name="check" size={14} color={colors.ink} /> : null}
+            {option.leading}
             <Text style={[styles.choiceText, active && styles.choiceTextActive]} numberOfLines={1}>
               {option.label}
             </Text>

@@ -5,6 +5,8 @@ const env = require('./config/env');
 const User = require('./models/User');
 const Restaurant = require('./models/Restaurant');
 const Courier = require('./models/Courier');
+const CourierDocument = require('./models/CourierDocument');
+const OtpCode = require('./models/OtpCode');
 const Order = require('./models/Order');
 const Payment = require('./models/Payment');
 const Rating = require('./models/Rating');
@@ -26,10 +28,13 @@ const ACCOUNTS = {
     { phone: '0922222203', name: 'Yonas Kebede', address: { label: 'Office', line: 'Piassa, near Square', city: 'Addis Ababa', lat: 9.0347, lng: 38.7514 } }
   ],
   couriers: [
-    { phone: '0933333301', name: 'Biruk Alemu', role: 'courier', vehicle: 'motorbike', lat: 9.0121, lng: 38.7596 },
-    { phone: '0933333302', name: 'Tigist Worku', role: 'courier', vehicle: 'motorbike', lat: 9.0092, lng: 38.7655 },
-    { phone: '0933333303', name: 'Nahom Fikru', role: 'courier', vehicle: 'bicycle', lat: 9.0301, lng: 38.7531 }
-  ]
+    { phone: '0933333301', name: 'Biruk Alemu', role: 'courier', vehicle: 'motorbike', documentType: 'driving_licence', lat: 9.0121, lng: 38.7596 },
+    { phone: '0933333302', name: 'Tigist Worku', role: 'courier', vehicle: 'motorbike', documentType: 'national_id', lat: 9.0092, lng: 38.7655 },
+    { phone: '0933333303', name: 'Nahom Fikru', role: 'courier', vehicle: 'bicycle', documentType: 'passport', lat: 9.0301, lng: 38.7531 }
+  ],
+  // Left in the queue on purpose: an admin needs something to approve the first time they open
+  // the screen, and the delivery app needs an account that shows the waiting-for-review state.
+  applicant: { phone: '0933333304', name: 'Samuel Girma', role: 'courier', vehicle: 'motorbike', documentType: 'national_id', lat: 9.0055, lng: 38.7621 }
 };
 
 const RESTAURANTS = [
@@ -38,7 +43,7 @@ const RESTAURANTS = [
     cuisine: ['Ethiopian', 'Traditional'],
     description: 'Hand-rolled injera, slow-cooked wots and a coffee ceremony at three.',
     emoji: '🍲',
-    tint: '#c1121f',
+    tint: '#b0472b',
     phone: '0911000001',
     address: 'Bole, Atlas Rd',
     lat: 9.0089,
@@ -129,11 +134,115 @@ const RESTAURANTS = [
   }
 ];
 
+const DOCUMENT_TITLES = {
+  national_id: 'National ID Card',
+  passport: 'Ethiopian Passport',
+  driving_licence: 'Driving Licence'
+};
+
+/**
+ * sharp is a dev dependency, and seed is a development command - but if it is ever run on a
+ * production install this says what to do about it instead of failing on a missing module.
+ */
+function rasteriser() {
+  try {
+    return require('sharp');
+  } catch {
+    throw new Error('[seed] specimen documents need `sharp`. Run `npm install` in backend/ first.');
+  }
+}
+
+/**
+ * The seeded couriers are fictional, so their papers are fictional: a flat specimen card, drawn
+ * as SVG and stored as PNG. The admin queue then has something to actually open and compare,
+ * rather than an approval button over an empty record.
+ */
+async function specimenPhoto(account, side) {
+  const sharp = rasteriser();
+  const title = DOCUMENT_TITLES[account.documentType];
+  const front = side === 'front';
+  // '<' has to arrive as an entity: a raw one ends the text element and sharp reads garbage.
+  const LT = '&lt;';
+  const filler = LT.repeat(11);
+  const mrzName = account.name.toUpperCase().replace(/ /g, LT + LT);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" font-family="DejaVu Sans, Arial, sans-serif">
+  <rect width="640" height="400" fill="#ffffff"/>
+  <rect x="2" y="2" width="636" height="396" fill="none" stroke="#c9c2b4" stroke-width="4"/>
+  <rect x="2" y="2" width="636" height="70" fill="#b0472b"/>
+  <text x="26" y="34" fill="#ffffff" font-size="21" font-weight="bold">ETHIOPIA - ${front ? title.toUpperCase() : 'REVERSE SIDE'}</text>
+  <text x="26" y="58" fill="#ffd9cc" font-size="15">${front ? 'Federal Democratic Republic' : `Specimen ${title}`}</text>
+  ${
+    front
+      ? `<rect x="26" y="98" width="132" height="162" fill="#efe9df" stroke="#c9c2b4" stroke-width="2"/>
+  <circle cx="92" cy="156" r="30" fill="#cfc7b8"/>
+  <path d="M48 258a44 44 0 0 1 88 0z" fill="#cfc7b8"/>
+  <text x="190" y="124" fill="#7a705f" font-size="13" letter-spacing="1">FULL NAME</text>
+  <text x="190" y="146" fill="#1c1a17" font-size="22" font-weight="bold">${account.name.toUpperCase()}</text>
+  <text x="190" y="184" fill="#7a705f" font-size="13" letter-spacing="1">PHONE</text>
+  <text x="190" y="206" fill="#1c1a17" font-size="20">${account.phone}</text>
+  <text x="190" y="244" fill="#7a705f" font-size="13" letter-spacing="1">VEHICLE</text>
+  <text x="190" y="266" fill="#1c1a17" font-size="20">${account.vehicle.toUpperCase()}</text>
+  <text x="26" y="300" fill="#7a705f" font-size="13" letter-spacing="1">ISSUED</text>
+  <text x="26" y="322" fill="#1c1a17" font-size="18">2019.06.01</text>
+  <text x="190" y="300" fill="#7a705f" font-size="13" letter-spacing="1">PLACE OF ISSUE</text>
+  <text x="190" y="322" fill="#1c1a17" font-size="18">Addis Ababa</text>`
+      : `<rect x="26" y="98" width="588" height="120" fill="#f7f4ee" stroke="#c9c2b4" stroke-width="2"/>
+  <text x="42" y="132" fill="#7a705f" font-size="13" letter-spacing="1">ADDRESS</text>
+  <text x="42" y="158" fill="#1c1a17" font-size="19">Bole Sub-city, Woreda 03, Addis Ababa</text>
+  <text x="42" y="188" fill="#7a705f" font-size="13" letter-spacing="1">EMERGENCY CONTACT</text>
+  <text x="42" y="210" fill="#1c1a17" font-size="19">0911 000 000</text>
+  <rect x="26" y="250" width="588" height="96" fill="#efe9df"/>
+  <text x="42" y="288" fill="#3a352d" font-size="20" font-family="DejaVu Sans Mono, monospace">ID${LT.repeat(2)}${account.phone}${LT.repeat(3)}${mrzName}${LT.repeat(3)}${filler}</text>
+  <text x="42" y="322" fill="#3a352d" font-size="20" font-family="DejaVu Sans Mono, monospace">${account.documentType.toUpperCase()}&lt;&lt;ETH&lt;&lt;&lt;2501019&lt;&lt;&lt;0&lt;&lt;&lt;&lt;&lt;</text>`
+  }
+  <text x="320" y="368" fill="#b0472b" opacity="0.28" font-size="42" font-weight="bold" text-anchor="middle" transform="rotate(-8 320 350)">SPECIMEN - NOT A REAL ID</text>
+</svg>`;
+  const data = await sharp(Buffer.from(svg)).png().toBuffer();
+  return { contentType: 'image/png', bytes: data.length, data, capturedAt: new Date() };
+}
+
+/**
+ * One courier, filed the way the real pipeline files them: an account, a profile whose
+ * verification says who reviewed it and when, and the two photos behind that decision.
+ */
+async function seedCourier(account, { status, admin }) {
+  const user = await createUser(account);
+  const submittedAt = new Date(Date.now() - 21 * 864e5);
+  const approved = status === 'approved';
+  const courier = await Courier.create({
+    userId: user._id,
+    name: user.name,
+    phone: user.phone,
+    vehicle: account.vehicle,
+    isOnline: approved,
+    lastKnownLocation: { type: 'Point', coordinates: [account.lng, account.lat] },
+    locationUpdatedAt: new Date(),
+    verification: {
+      status,
+      documentType: account.documentType,
+      submittedAt,
+      reviewedAt: approved ? new Date(submittedAt.getTime() + 864e5) : null,
+      reviewedBy: approved ? admin._id : null,
+      reviewNote: ''
+    }
+  });
+  await CourierDocument.create({
+    courierId: courier._id,
+    userId: user._id,
+    documentType: account.documentType,
+    front: await specimenPhoto(account, 'front'),
+    back: await specimenPhoto(account, 'back')
+  });
+  return courier;
+}
+
 async function reset() {
   await Promise.all([
     User.deleteMany({}),
     Restaurant.deleteMany({}),
     Courier.deleteMany({}),
+    CourierDocument.deleteMany({}),
+    OtpCode.deleteMany({}),
     Order.deleteMany({}),
     Payment.deleteMany({}),
     Rating.deleteMany({})
@@ -143,6 +252,9 @@ async function reset() {
 async function createUser({ phone, name, role }, address) {
   const user = new User({ phone, name, role, addresses: address ? [{ ...address, contactPhone: phone }] : [] });
   user.setPassword('gebeta123');
+  // A customer exists in this system only after a code reached their phone; a courier's proof
+  // is the document an admin reads, so their number is deliberately left unstamped.
+  if (user.role === 'customer') user.phoneVerifiedAt = new Date();
   await user.save();
   return user;
 }
@@ -211,21 +323,22 @@ async function main() {
   for (const account of ACCOUNTS.customers) customers.push(await createUser(account, account.address));
   console.log(`• ${customers.length} customers (password gebeta123)`);
 
-  const couriers = [];
-  for (const account of ACCOUNTS.couriers) {
-    const user = await createUser(account);
-    const courier = await Courier.create({
-      userId: user._id,
-      name: user.name,
-      phone: user.phone,
-      vehicle: account.vehicle,
-      isOnline: true,
-      lastKnownLocation: { type: 'Point', coordinates: [account.lng, account.lat] },
-      locationUpdatedAt: new Date()
-    });
-    couriers.push(courier);
+  // A saved rail per customer, placed before any order: the Payment record then carries
+  // the brand they chose instead of the gateway's 'mock' placeholder.
+  const RAILS = [
+    { brand: 'telebirr', label: 'Personal' },
+    { brand: 'mpesa', label: 'Work phone' },
+    { brand: 'card', label: 'Visa', last4: '4242', expiryMonth: 9, expiryYear: 2031 }
+  ];
+  for (const [index, customer] of customers.entries()) {
+    customer.paymentMethods.push({ ...RAILS[index % RAILS.length], isDefault: true });
+    await customer.save();
   }
-  console.log(`• ${couriers.length} couriers online`);
+
+  const couriers = [];
+  for (const account of ACCOUNTS.couriers) couriers.push(await seedCourier(account, { status: 'approved', admin }));
+  const applicant = await seedCourier(ACCOUNTS.applicant, { status: 'pending', admin });
+  console.log(`• ${couriers.length} approved couriers online; ${applicant.name} (${applicant.phone}) is waiting for review`);
 
   const restaurants = [];
   for (const [index, spec] of RESTAURANTS.entries()) {
@@ -327,7 +440,8 @@ async function main() {
       admin: { phone: ACCOUNTS.admin.phone, password: 'gebeta123' },
       restaurantOwner: { phone: ACCOUNTS.owners[0].phone, password: 'gebeta123', restaurant: RESTAURANTS[0].name },
       customer: { phone: ACCOUNTS.customers[0].phone, password: 'gebeta123' },
-      couriers: ACCOUNTS.couriers.map((c) => ({ phone: c.phone, password: 'gebeta123' }))
+      couriers: ACCOUNTS.couriers.map((c) => ({ phone: c.phone, password: 'gebeta123' })),
+      courierAwaitingReview: { phone: ACCOUNTS.applicant.phone, password: 'gebeta123', verification: 'pending' }
     }
   };
   await mongoose.connection.db.collection('seeds').replaceOne(

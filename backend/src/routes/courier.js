@@ -1,6 +1,8 @@
 const express = require('express');
 const Order = require('../models/Order');
 const Courier = require('../models/Courier');
+const CourierDocument = require('../models/CourierDocument');
+const verification = require('../services/courierVerification');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/error');
 const { transition, refreshEta } = require('../services/orderService');
@@ -111,6 +113,20 @@ router.post(
   '/online',
   asyncHandler(async (req, res) => {
     const courier = await me(req);
+    if (req.body?.isOnline && !verification.mayWork(courier)) {
+      // Coming offline is never refused for this reason: an unapproved courier must always be
+      // able to stop, and the status plus the note let the app say *why* they cannot start.
+      return res.status(403).json({
+        error: {
+          code: 'COURIER_NOT_VERIFIED',
+          message:
+            courier.verification.status === 'rejected'
+              ? courier.verification.reviewNote || 'Your documents were not accepted'
+              : 'An administrator has to approve your ID photos before you can take orders',
+          verification: verification.statusView(courier)
+        }
+      });
+    }
     courier.isOnline = Boolean(req.body?.isOnline);
     if (!courier.isOnline && courier.activeOrders > 0) {
       return res.status(409).json({
@@ -122,6 +138,44 @@ router.post(
     bus.emitToRoom(bus.COURIER_POOL_ROOM, 'courier:presence', view);
     bus.notifyAdmin('courier:presence', view);
     res.json({ courier: courierPublicView(courier) });
+  })
+);
+
+/** What the courier can see about their own file — the decision and its reason, never the photos. */
+router.get(
+  '/verification',
+  asyncHandler(async (req, res) => {
+    const courier = await me(req);
+    const doc = await CourierDocument.findOne({ courierId: courier._id });
+    res.json({ verification: verification.statusView(courier, doc) });
+  })
+);
+
+/**
+ * Re-files after a rejection. The status returns to `pending` here, so a courier who fixes what
+ * the admin complained about is back in the queue without anybody having to reset it by hand.
+ */
+router.post(
+  '/documents',
+  asyncHandler(async (req, res) => {
+    const courier = await me(req);
+    const { type, front, back } = req.body || {};
+    let photos;
+    try {
+      photos = verification.readPhotos({ documentType: type, front, back });
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: { code: err.code || 'DOCUMENT_INVALID', message: err.message } });
+    }
+    const user = req.user;
+    const stored = await verification.storePhotos({ courier, user, documentType: type, photos });
+    bus.notifyAdmin('courier:documents', {
+      courierId: String(courier._id),
+      userId: String(courier.userId),
+      name: courier.name,
+      phone: courier.phone,
+      verification: verification.statusView(courier, stored.doc)
+    });
+    res.status(201).json({ verification: verification.statusView(courier, stored.doc) });
   })
 );
 

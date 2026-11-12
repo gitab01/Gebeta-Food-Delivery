@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { useI18n } from '../../shared/lang';
 import { useSession } from '../../shared/session';
 import { colors, space, type, useStyles } from '../../shared/theme';
-import { Logo } from '../../shared/brand';
+import { BasketMark } from '../../shared/brand';
 import { Button, Choices, Field, Notice, Screen } from '../../shared/ui';
 
 const VEHICLES = ['foot', 'bicycle', 'motorbike', 'car'];
@@ -37,8 +37,10 @@ export default function Register() {
   return (
     <Screen>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Logo size={40} />
-        <Text style={[type.eyebrow, { marginTop: space.lg }]}>{t('register.courierEyebrow')}</Text>
+        <View style={styles.hero}>
+          <BasketMark size={88} />
+          <Text style={type.eyebrow}>{t('register.courierEyebrow')}</Text>
+        </View>
         <Text style={[type.h1, styles.title]}>{t('register.courierTitle')}</Text>
         <Text style={[type.small, styles.intro]}>{t('register.courierIntro')}</Text>
 
@@ -71,6 +73,7 @@ export default function Register() {
 const makeStyles = () =>
   StyleSheet.create({
     scroll: { paddingVertical: space.xxl, paddingBottom: space.xxl },
+    hero: { alignItems: 'center', gap: space.sm, marginBottom: space.md },
     title: { marginTop: space.sm, marginBottom: space.lg },
     intro: { marginBottom: space.xl, lineHeight: 21 },
     note: { marginTop: space.md, marginBottom: space.xl },

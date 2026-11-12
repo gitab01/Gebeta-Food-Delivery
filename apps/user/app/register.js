@@ -4,6 +4,7 @@ import { Link, useRouter } from 'expo-router';
 import { useSession } from '../../shared/session';
 import { colors, radius, space, type, useStyles } from '../../shared/theme';
 import { Button, Field, Notice, Screen } from '../../shared/ui';
+import { BasketMark } from '../../shared/brand';
 import { useI18n } from '../../shared/lang';
 
 // Addis Ababa blocks the seed data lives around; picking one avoids asking for a
@@ -50,7 +51,10 @@ export default function Register() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll}>
           <View style={styles.form}>
-            <Text style={type.eyebrow}>{t('register.eyebrow')}</Text>
+            <View style={styles.hero}>
+              <BasketMark size={88} />
+              <Text style={type.eyebrow}>{t('register.eyebrow')}</Text>
+            </View>
             <Text style={[type.h1, styles.title]}>{t('register.title')}</Text>
             <Text style={[type.small, styles.intro]}>{t('auth.registerIntro')}</Text>
 
@@ -106,7 +110,8 @@ const makeStyles = () =>
   StyleSheet.create({
     scroll: { flexGrow: 1, justifyContent: 'center', paddingVertical: space.xxl },
     form: { width: '100%', maxWidth: 400, alignSelf: 'center' },
-    title: { marginTop: space.xs },
+    hero: { alignItems: 'center', gap: space.sm },
+    title: { marginTop: space.md },
     intro: { marginBottom: space.xl, lineHeight: 21 },
     areaLabel: { marginTop: space.md, marginBottom: space.sm },
     presets: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' },

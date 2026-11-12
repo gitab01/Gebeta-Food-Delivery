@@ -27,7 +27,7 @@ const restaurantSchema = new mongoose.Schema(
     cuisine: { type: [String], default: [] },
     description: { type: String, default: '' },
     emoji: { type: String, default: '🍲' },
-    tint: { type: String, default: '#c1121f' },
+    tint: { type: String, default: '#b0472b' },
     phone: { type: String, default: '' },
     address: { type: String, default: '' },
     location: {

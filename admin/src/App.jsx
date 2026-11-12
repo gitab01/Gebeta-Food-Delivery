@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, closeRealtime, readSession, realtime, writeSession } from './api.js';
 import { Empty, Field, Notice } from './components.jsx';
-import { Brand, Ico, ThemeToggle } from './brand.jsx';
+import { BasketMark, Brand, Ico, ThemeToggle } from './brand.jsx';
 import Live from './views/Live.jsx';
 import Restaurants from './views/Restaurants.jsx';
 import Couriers from './views/Couriers.jsx';
+import Verification from './views/Verification.jsx';
 import Users from './views/Users.jsx';
 import Kitchen from './views/Kitchen.jsx';
 import Analytics from './views/Analytics.jsx';
@@ -15,6 +16,7 @@ const VIEWS = [
   { key: 'analytics', label: 'Analytics', icon: 'chart', view: Analytics, roles: ['admin'] },
   { key: 'restaurants', label: 'Kitchens', icon: 'store', view: Restaurants, roles: ['admin'] },
   { key: 'couriers', label: 'Couriers', icon: 'bike', view: Couriers, roles: ['admin'] },
+  { key: 'verification', label: 'Verification', icon: 'shield', view: Verification, roles: ['admin'] },
   { key: 'users', label: 'Accounts', icon: 'users', view: Users, roles: ['admin'] },
   { key: 'settings', label: 'Settings', icon: 'sliders', view: Settings, roles: ['admin'] },
   // The same web app is the kitchen's console when an owner signs in, so the
@@ -50,7 +52,10 @@ function Login({ onDone }) {
   return (
     <div className="login">
       <form className="card" onSubmit={submit}>
-        <Brand />
+        <div className="login-hero">
+          <BasketMark size={84} />
+          <strong>Gebeta Admin</strong>
+        </div>
         <p className="sub">Operator console for the delivery marketplace.</p>
         <Notice text={error} />
         <Field label="Phone">
@@ -99,6 +104,7 @@ export default function App() {
       'order:new',
       'order:eta',
       'courier:presence',
+      'courier:documents',
       'courier:location',
       'restaurant:availability',
       'restaurant:menu',

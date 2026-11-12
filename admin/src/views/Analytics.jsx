@@ -6,6 +6,7 @@ import { Empty, Kpi, Notice, Panel } from '../components.jsx';
 const SOURCE_LABEL = {
   card: 'Card',
   telebirr: 'Telebirr',
+  mpesa: 'M-PESA',
   cbebir: 'CBE Birr',
   cash: 'Cash on delivery',
   mock: 'Local gateway (dev)'

@@ -2,6 +2,8 @@ const express = require('express');
 const Order = require('../models/Order');
 const User = require('../models/User');
 const Courier = require('../models/Courier');
+const CourierDocument = require('../models/CourierDocument');
+const verification = require('../services/courierVerification');
 const Restaurant = require('../models/Restaurant');
 const Payment = require('../models/Payment');
 const Settings = require('../models/Settings');
@@ -143,6 +145,88 @@ router.get(
     const active = await Order.find({ status: { $in: ACTIVE_FOR_COURIER } }).select('courierId status eta').lean();
     const jobs = Object.fromEntries(active.filter((o) => o.courierId).map((o) => [String(o.courierId), o.status]));
     res.json({ couriers: couriers.map(courierPublicView), liveJobs: jobs });
+  })
+);
+
+/**
+ * The queue of identity files. Photos are never included here — the list says whether both
+ * sides are on file, and the admin opens a side only when they are looking at that courier.
+ */
+router.get(
+  '/couriers/verification',
+  asyncHandler(async (req, res) => {
+    const status = ['pending', 'approved', 'rejected', 'all'].includes(req.query.status) ? String(req.query.status) : 'pending';
+    const filter = status === 'all' ? {} : { 'verification.status': status };
+    const couriers = await Courier.find(filter).sort({ 'verification.submittedAt': 1 }).limit(200);
+    const docs = await CourierDocument.find({ courierId: { $in: couriers.map((c) => c._id) } })
+      .select('courierId documentType front.bytes back.bytes')
+      .lean();
+    const byCourier = Object.fromEntries(docs.map((d) => [String(d.courierId), d]));
+    const users = await User.find({ _id: { $in: couriers.map((c) => c.userId) } }).select('name phone createdAt').lean();
+    const byUser = Object.fromEntries(users.map((u) => [String(u._id), u]));
+
+    res.json({
+      couriers: couriers.map((c) => {
+        const doc = byCourier[String(c._id)];
+        return {
+          courierId: String(c._id),
+          userId: String(c.userId),
+          name: c.name || byUser[String(c.userId)]?.name || '',
+          phone: c.phone || byUser[String(c.userId)]?.phone || '',
+          vehicle: c.vehicle,
+          createdAt: byUser[String(c.userId)]?.createdAt || null,
+          isOnline: Boolean(c.isOnline),
+          verification: verification.statusView(c, doc)
+        };
+      })
+    });
+  })
+);
+
+/**
+ * One side of one courier's document, to an admin's browser only. `side` is checked against the
+ * model rather than trusting a path, and the response is private and no-store because this is a
+ * photograph of somebody's identity.
+ */
+router.get(
+  '/couriers/:userId/verification/document/:side',
+  asyncHandler(async (req, res) => {
+    const side = req.params.side === 'front' || req.params.side === 'back' ? req.params.side : null;
+    if (!side) return res.status(400).json({ error: { code: 'VALIDATION', message: 'side must be front or back' } });
+
+    const courier = await Courier.findOne({ userId: req.params.userId });
+    if (!courier) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No courier for that account' } });
+    // The photo bytes are `select: false`, so they only arrive on an explicit request.
+    // Hydrated rather than lean: `lean()` returns the driver's Binary object, which is not a Buffer.
+    const doc = await CourierDocument.findOne({ courierId: courier._id }).select('+front.data +back.data');
+    const photo = doc?.[side];
+    if (!photo?.data?.length) return res.status(404).json({ error: { code: 'NO_PHOTO', message: 'That side was never submitted' } });
+
+    res.set('Cache-Control', 'private, no-store');
+    res.type(photo.contentType).send(photo.data);
+  })
+);
+
+/** The operator's decision. Whatever it is, the courier is told, in their own app. */
+router.post(
+  '/couriers/:userId/verification',
+  asyncHandler(async (req, res) => {
+    const courier = await Courier.findOne({ userId: req.params.userId });
+    if (!courier) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No courier for that account' } });
+    let updated;
+    try {
+      updated = await verification.review({
+        courierId: courier._id,
+        decision: req.body?.decision,
+        note: req.body?.note,
+        adminId: req.user._id
+      });
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ error: { code: err.code || 'VALIDATION', message: err.message } });
+      throw err;
+    }
+    bus.emitToRoom(bus.userRoom(courier.userId), 'courier:verification', verification.statusView(updated));
+    res.json({ courier: courierPublicView(updated) });
   })
 );
 

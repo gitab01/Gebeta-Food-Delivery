@@ -4,7 +4,7 @@ import { Link, useRouter } from 'expo-router';
 import { useSession } from '../../shared/session';
 import { colors, space, type, useStyles } from '../../shared/theme';
 import { Button, Field, Notice, Screen } from '../../shared/ui';
-import { Logo } from '../../shared/brand';
+import { BasketMark, Icon } from '../../shared/brand';
 import { useI18n } from '../../shared/lang';
 
 export default function Login() {
@@ -35,9 +35,11 @@ export default function Login() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll}>
           <View style={styles.form}>
-            <Logo size={46} />
-            <Text style={[type.eyebrow, { marginTop: space.lg }]}>{t('app.name')}</Text>
-            <Text style={[type.h1, { marginTop: space.xs }]}>{t('app.tagline')}</Text>
+            <View style={styles.hero}>
+              <BasketMark size={96} />
+              <Text style={type.eyebrow}>{t('app.name')}</Text>
+            </View>
+            <Text style={[type.h1, { marginTop: space.md }]}>{t('app.tagline')}</Text>
             <Text style={[type.small, styles.intro]}>{t('auth.userIntro')}</Text>
 
             <Notice text={error} />
@@ -51,6 +53,11 @@ export default function Login() {
                 {t('auth.register')}
               </Link>
             </View>
+
+            <Link href="/privacy" style={styles.privacy}>
+              <Icon name="lock" size={14} color={colors.faint} />
+              <Text style={type.tiny}>{t('auth.privacy')}</Text>
+            </Link>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -62,7 +69,15 @@ const makeStyles = () =>
   StyleSheet.create({
     scroll: { flexGrow: 1, justifyContent: 'center', paddingVertical: space.xxl },
     form: { width: '100%', maxWidth: 400, alignSelf: 'center' },
+    hero: { alignItems: 'center', gap: space.sm },
     intro: { marginTop: space.sm, marginBottom: space.xl, lineHeight: 21 },
     alt: { flexDirection: 'row', justifyContent: 'center', marginTop: space.lg },
-    link: { color: colors.accentInk, fontWeight: '700' }
+    link: { color: colors.accentInk, fontWeight: '700' },
+    privacy: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: space.sm,
+      marginTop: space.lg
+    }
   });

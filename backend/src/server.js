@@ -18,6 +18,9 @@ async function main() {
     // Credentials masked: this line lands in hosted logs verbatim.
     console.log(`[gebeta] mongo ${env.mongoUri.replace(/\/\/[^/@]*@/, '//:***@')}`);
     console.log(`[gebeta] payment gateway: ${env.gateway}`);
+    if (env.nodeEnv !== 'production' && env.mongoUri.includes('+srv')) {
+      console.warn('[gebeta] WARNING: this dev process shares an Atlas cluster with the deployed API. Both run dispatch timers, so a job can be offered twice. Use a local database or stop the deployed service.');
+    }
   });
 
   const shutdown = async (signal) => {

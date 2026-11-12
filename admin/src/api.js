@@ -47,6 +47,8 @@ export const api = {
   transition: (id, to, note) => request(`/admin/orders/${id}/transition`, { method: 'POST', body: { to, note } }),
   reassign: (id) => request(`/admin/orders/${id}/reassign`, { method: 'POST' }),
   couriers: () => request('/admin/couriers'),
+  courierQueue: (status = 'pending') => request(`/admin/couriers/verification?status=${encodeURIComponent(status)}`),
+  reviewCourier: (userId, body) => request(`/admin/couriers/${userId}/verification`, { method: 'POST', body }),
   restaurants: () => request('/admin/restaurants'),
   patchRestaurant: (id, body) => request(`/admin/restaurants/${id}`, { method: 'PATCH', body }),
   users: ({ role, q } = {}) => {
@@ -72,6 +74,24 @@ export const api = {
     setItem: (itemId, body) => request(`/restaurant-owner/me/menu/items/${itemId}`, { method: 'PATCH', body })
   }
 };
+
+/**
+ * An identity photo is served to this browser only with the operator's header, so an `<img>`
+ * cannot simply point at the route. It comes back as an object URL instead, which the caller
+ * revokes when the image is replaced.
+ */
+export async function documentPhoto(userId, side, signal) {
+  const session = readSession();
+  const res = await fetch(`${API_URL}/api/admin/couriers/${userId}/verification/document/${side}`, {
+    headers: session?.token ? { authorization: `Bearer ${session.token}` } : {},
+    signal
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json?.error?.message || `Photo unavailable (${res.status})`);
+  }
+  return URL.createObjectURL(await res.blob());
+}
 
 let socket = null;
 

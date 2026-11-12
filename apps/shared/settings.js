@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
+import Constants from 'expo-constants';
+import { useRouter } from 'expo-router';
+import { api } from './api';
 import { getPref, PREF, setPref } from './prefs';
 import { useI18n } from './lang';
 import { space, type, useStyles } from './theme';
@@ -15,9 +18,24 @@ import { Card, Notice, Preferences, Screen, Setting, Toggle } from './ui';
 export function AppSettings() {
   const styles = useStyles(makeStyles);
   const { t } = useI18n();
+  const router = useRouter();
   const [notify, setNotify] = useState(() => getPref(PREF.notify) !== 'off');
+  const [meta, setMeta] = useState(null);
   const mapOn = useMapsOn();
   const keyPresent = mapsReady();
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .meta()
+      .then((data) => alive && setMeta(data))
+      .catch(() => alive && setMeta({}));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const support = meta?.supportContact;
 
   return (
     <Screen>
@@ -56,9 +74,16 @@ export function AppSettings() {
           )}
         </Card>
 
+        <Card style={{ marginTop: space.md }}>
+          <Text style={[type.eyebrow, { marginBottom: space.xs }]}>{t('set.about')}</Text>
+          <Text style={type.small}>{t('set.aboutBody')}</Text>
+        </Card>
+
         <Card style={{ marginTop: space.md, paddingVertical: space.xs }}>
-          <Setting icon="person" label={t('set.support')} value="support@gebeta.app" />
-          <Setting icon="settings" label={t('set.version')} value="1.0.0" />
+          <Setting icon="phone" label={t('set.contact')} value={support} />
+          {meta && !support ? <Text style={[type.tiny, styles.hint]}>{t('set.noContactSet')}</Text> : null}
+          <Setting icon="settings" label={t('set.version')} value={Constants.expoConfig?.version || '1.0.0'} />
+          <Setting icon="lock" label={t('privacy.title')} onPress={() => router.push('/privacy')} />
         </Card>
 
         <Text style={[type.tiny, { marginTop: space.lg, textAlign: 'center' }]}>{t('set.dataFoot')}</Text>
@@ -69,5 +94,6 @@ export function AppSettings() {
 
 const makeStyles = () =>
   StyleSheet.create({
-    scroll: { paddingVertical: space.lg, paddingBottom: space.xxl }
+    scroll: { paddingVertical: space.lg, paddingBottom: space.xxl },
+    hint: { paddingLeft: space.xxl + space.md, paddingBottom: space.md }
   });

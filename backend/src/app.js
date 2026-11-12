@@ -1,7 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const env = require('./config/env');
-const { notFound, errorHandler } = require('./middleware/error');
+const Settings = require('./models/Settings');
+const { asyncHandler, notFound, errorHandler } = require('./middleware/error');
 const payments = require('./routes/payments');
 
 function createApp() {
@@ -12,6 +13,12 @@ function createApp() {
   // The gateway callback needs the untouched request body to verify its signature,
   // so it is mounted before any JSON parsing happens.
   app.use('/webhooks', payments.webhookRouter);
+
+  // A courier's papers are two photos posted inline as base64, so these two paths need a much
+  // wider body than anything else here. Everything else stays on the 512kb limit below.
+  const photoJson = express.json({ limit: env.photoBodyLimit });
+  app.use('/api/auth/register', photoJson);
+  app.use('/api/courier/documents', photoJson);
 
   app.use(express.json({ limit: '512kb' }));
 
@@ -24,6 +31,20 @@ function createApp() {
       offerTimeoutMs: env.offerTimeoutMs,
       courierLoadCap: env.courierLoadCap,
       at: new Date().toISOString()
+    })
+  );
+
+  // What the apps need for their About and Contact rows before anyone signs in.
+  app.get(
+    '/api/meta',
+    asyncHandler(async (_req, res) => {
+      const settings = await Settings.load();
+      res.json({
+        supportContact: settings.supportContact || '',
+        currency: settings.currency,
+        language: settings.language,
+        maintenanceMode: settings.maintenanceMode
+      });
     })
   );
 

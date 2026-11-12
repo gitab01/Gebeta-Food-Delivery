@@ -111,7 +111,7 @@ async function createOrder({ customer, restaurantId, lines, addressId, deliveryA
     orderId: order._id,
     customerId: customer._id,
     amountCents: order.totalCents,
-    method: env.gateway === 'stripe' ? 'card' : 'mock',
+    method: customer.chosenPaymentBrand() || (env.gateway === 'stripe' ? 'card' : 'mock'),
     gateway: env.gateway,
     status: 'requires_payment'
   });

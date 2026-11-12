@@ -30,6 +30,7 @@ function RootNavigator() {
       <Stack.Screen name="track/[id]" options={{ title: t('track.title') }} />
       <Stack.Screen name="payment" options={{ title: t('pay.title') }} />
       <Stack.Screen name="settings" options={{ title: t('set.title') }} />
+      <Stack.Screen name="privacy" options={{ title: t('privacy.title') }} />
     </Stack>
   );
 }

@@ -3,12 +3,10 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../shared/api';
 import { Icon } from '../../shared/brand';
 import { useI18n } from '../../shared/lang';
+import { PAY_BRANDS, PayMark } from '../../shared/paybrands';
 import { useSession } from '../../shared/session';
 import { colors, radius, space, type, useStyles } from '../../shared/theme';
 import { Button, Card, Chip, Choices, Empty, Field, Notice, Screen } from '../../shared/ui';
-
-const BRANDS = ['card', 'telebirr', 'cbebir', 'cash'];
-const GLYPH = { card: 'card', telebirr: 'phone', cbebir: 'bank', cash: 'money' };
 
 /**
  * What is stored here is a choice, not credentials: brand, a nickname and the last four
@@ -76,7 +74,7 @@ export default function PaymentMethods() {
             {methods.map((method, index) => (
               <View key={method.id} style={[styles.item, index > 0 && styles.divider]}>
                 <View style={styles.brand}>
-                  <Icon name={GLYPH[method.brand] || 'card'} size={18} color={colors.muted} />
+                  <PayMark brand={method.brand} size={26} color={colors.muted} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={type.body}>{method.label || t(`pay.${method.brand}`)}</Text>
@@ -109,7 +107,11 @@ export default function PaymentMethods() {
             style={{ marginTop: space.md }}
             value={form.brand}
             onChange={(brand) => patch({ brand })}
-            options={BRANDS.map((brand) => ({ value: brand, label: t(`pay.${brand}`) }))}
+            options={PAY_BRANDS.map((brand) => ({
+              value: brand,
+              label: t(`pay.${brand}`),
+              leading: <PayMark brand={brand} size={18} color={colors.muted} />
+            }))}
           />
 
           <Field

@@ -78,6 +78,7 @@ async function findCandidates(order, restaurant, radiusMeters) {
   const lng = restaurant.location.coordinates[0];
   const couriers = await Courier.find({
     isOnline: true,
+    'verification.status': 'approved',
     lastKnownLocation: { $geoWithin: { $centerSphere: [[lng, lat], radiusMeters / 6378100] } }
   }).lean();
   await reconcileLoad(couriers);

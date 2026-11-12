@@ -4,6 +4,9 @@ import { Badge, Empty, Kpi, Notice, Panel } from '../components.jsx';
 
 const VEHICLE_GLYPH = { motorbike: 'M', bicycle: 'B', car: 'C', walk: 'W' };
 
+/** Approval is what puts a courier in front of an order, so the pool shows it beside presence. */
+const CLEARED = { approved: 'COMPLETED', pending: 'READY', rejected: 'REJECTED' };
+
 /**
  * `locationUpdatedAt` is the only honest signal of whether a courier's app is
  * still reporting, so the pool is judged on ping age rather than the online flag.
@@ -66,6 +69,7 @@ export default function Couriers({ tick }) {
                 <tr>
                   <th>Courier</th>
                   <th>Presence</th>
+                  <th>Cleared</th>
                   <th>Jobs</th>
                   <th>Delivered</th>
                   <th>Rating</th>
@@ -91,6 +95,9 @@ export default function Couriers({ tick }) {
                       </td>
                       <td>
                         <Badge status={c.isOnline ? 'COMPLETED' : 'CANCELLED'} label={c.isOnline ? 'Online' : 'Offline'} />
+                      </td>
+                      <td>
+                        <Badge status={CLEARED[c.verification?.status] || 'NEUTRAL'} label={c.verification?.status || 'unknown'} />
                       </td>
                       <td className="num">
                         {c.activeOrders || 0}
@@ -122,6 +129,10 @@ export default function Couriers({ tick }) {
                 <dd className="num tiny">{picked.userId}</dd>
                 <dt>Vehicle</dt>
                 <dd>{picked.vehicle}</dd>
+                <dt>Cleared to work</dt>
+                <dd>{picked.verification?.status || 'unknown'}</dd>
+                <dt>Document on file</dt>
+                <dd className="tiny">{picked.verification?.documentType || '—'}</dd>
                 <dt>Reported position</dt>
                 <dd className="num tiny">
                   {picked.lat != null ? `${picked.lat.toFixed(5)}, ${picked.lng.toFixed(5)}` : 'never reported'}

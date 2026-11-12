@@ -75,7 +75,7 @@ function LiveCityMap({ kitchens, couriers, height }) {
     if (!map.current || !window.google) return;
     const want = new Map();
     kitchens.forEach((k) => k.lat != null && want.set(`k${k.id}`, { position: { lat: k.lat, lng: k.lng }, icon: pin('#0f7b3f', 'K'), title: `${k.name}${k.isOpen === false ? ' (closed)' : ''}` }));
-    couriers.forEach((c) => c.lat != null && want.set(`c${c.id}`, { position: { lat: c.lat, lng: c.lng }, icon: pin('#c1121f', 'C'), title: `${c.name} · ${c.vehicle || 'courier'}` }));
+    couriers.forEach((c) => c.lat != null && want.set(`c${c.id}`, { position: { lat: c.lat, lng: c.lng }, icon: pin('#b0472b', 'C'), title: `${c.name} · ${c.vehicle || 'courier'}` }));
 
     marks.current.forEach((marker, id) => {
       const next = want.get(id);

@@ -3,6 +3,10 @@ require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
 const int = (v, d) => (v === undefined || v === '' || Number.isNaN(Number(v)) ? d : Number(v));
 
+const courierDocMaxBytes = int(process.env.COURIER_DOC_MAX_BYTES, 4 * 1024 * 1024);
+// Two photos ride in one JSON body as base64, which costs roughly a third more than the bytes.
+const photoBodyLimit = process.env.PHOTO_BODY_LIMIT || `${Math.ceil((courierDocMaxBytes * 2 * 4) / 3 / 1048576) + 1}mb`;
+
 const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: int(process.env.PORT, 4000),
@@ -29,6 +33,18 @@ const env = {
   serviceRateBps: int(process.env.SERVICE_RATE_BPS, 500),
   courierFeeCents: int(process.env.COURIER_FEE_CENTS, 12000),
   minOrderCents: int(process.env.MIN_ORDER_CENTS, 10000),
+
+  // Phone verification codes
+  smsProvider: process.env.SMS_PROVIDER || 'log',
+  otpCodeLength: int(process.env.OTP_CODE_LENGTH, 6),
+  otpTtlMs: int(process.env.OTP_TTL_MS, 5 * 60 * 1000),
+  otpMaxAttempts: int(process.env.OTP_MAX_ATTEMPTS, 5),
+  otpResendAfterMs: int(process.env.OTP_RESEND_AFTER_MS, 30 * 1000),
+  otpHourlyCap: int(process.env.OTP_HOURLY_CAP, 5),
+
+  // Courier identity documents, sent as base64 inside JSON
+  courierDocMaxBytes,
+  photoBodyLimit,
 
   gateway: process.env.PAYMENT_GATEWAY || (process.env.STRIPE_SECRET_KEY ? 'stripe' : 'mock'),
   stripeSecretKey: process.env.STRIPE_SECRET_KEY || '',

@@ -38,6 +38,7 @@ function RootNavigator() {
       <Stack.Screen name="job/[id]" options={{ title: t('job.title') }} />
       <Stack.Screen name="vehicle" options={{ title: t('vehicle.title') }} />
       <Stack.Screen name="settings" options={{ title: t('set.title') }} />
+      <Stack.Screen name="privacy" options={{ title: t('privacy.title') }} />
     </Stack>
   );
 }

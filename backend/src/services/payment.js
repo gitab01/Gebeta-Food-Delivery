@@ -8,8 +8,9 @@ const { STATUS, ACTOR } = require('./status');
  * Order status reaches PAID through exactly one door: `markPaid`, which is called
  * by the gateway confirmation path (a verified Stripe webhook, or the local mock
  * gateway that stands in for it in development). A client can never claim payment.
+ * The brand stays whatever was chosen when the Payment was created.
  */
-async function markPaid({ orderId, gatewayRef, method, raw = {} }) {
+async function markPaid({ orderId, gatewayRef, raw = {} }) {
   const payment = await Payment.findOne({ orderId });
   if (!payment) throw Object.assign(new Error('No payment intent for this order'), { status: 409 });
   if (payment.status === 'succeeded') {
@@ -19,7 +20,6 @@ async function markPaid({ orderId, gatewayRef, method, raw = {} }) {
 
   payment.status = 'succeeded';
   payment.gatewayRef = gatewayRef || payment.gatewayRef;
-  payment.method = method || payment.method;
   payment.confirmedAt = new Date();
   payment.raw = raw;
   await payment.save();
@@ -48,7 +48,7 @@ async function createIntent(orderId, customer) {
       customerId: customer._id,
       amountCents: order.totalCents,
       gateway: env.gateway,
-      method: env.gateway === 'stripe' ? 'card' : 'mock',
+      method: customer.chosenPaymentBrand() || (env.gateway === 'stripe' ? 'card' : 'mock'),
       status: 'requires_payment'
     });
   }
@@ -91,7 +91,7 @@ async function confirmMock(paymentId, customer) {
   if (!payment) throw Object.assign(new Error('Unknown payment'), { status: 404 });
   if (String(payment.customerId) !== String(customer._id)) throw Object.assign(new Error('Not your payment'), { status: 403 });
   if (payment.gateway !== 'mock') throw Object.assign(new Error('This order was taken by a live gateway'), { status: 409 });
-  return markPaid({ orderId: payment.orderId, gatewayRef: payment.gatewayRef, method: payment.method, raw: { confirmedBy: 'mock-gateway' } });
+  return markPaid({ orderId: payment.orderId, gatewayRef: payment.gatewayRef, raw: { confirmedBy: 'mock-gateway' } });
 }
 
 function verifyStripeEvent(rawBody, signature) {
@@ -112,7 +112,7 @@ async function applyStripeEvent(event) {
       await Payment.findOneAndUpdate({ orderId }, { status: 'failed', failureReason: intent.last_payment_error?.message || 'declined' });
       return { ok: true, status: 'failed' };
     }
-    await markPaid({ orderId, gatewayRef: intent.id, method: 'card', raw: { eventId: event.id } });
+    await markPaid({ orderId, gatewayRef: intent.id, raw: { eventId: event.id } });
     return { ok: true, status: 'succeeded' };
   }
   return { ignored: true, type: event.type };

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { PAYMENT_BRANDS } = require('../config/brands');
 
 const paymentSchema = new mongoose.Schema(
   {
@@ -6,7 +7,7 @@ const paymentSchema = new mongoose.Schema(
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
     amountCents: { type: Number, required: true, min: 0 },
     currency: { type: String, default: 'ETB' },
-    method: { type: String, enum: ['card', 'telebirr', 'cbebir', 'cash', 'mock'], default: 'mock' },
+    method: { type: String, enum: [...PAYMENT_BRANDS, 'mock'], default: 'mock' },
     gateway: { type: String, enum: ['mock', 'stripe'], default: 'mock' },
     status: {
       type: String,

@@ -109,6 +109,11 @@ function courierPublicView(courier) {
     ratingStars: courier.ratingStars,
     ratingCount: courier.ratingCount,
     completedDeliveries: courier.completedDeliveries,
+    // The verdict travels; the reviewer's note does not, so it is not broadcast across the pool.
+    verification: {
+      status: courier.verification?.status || 'pending',
+      documentType: courier.verification?.documentType || ''
+    },
     lat: located ? located.lat : null,
     lng: located ? located.lng : null,
     locationUpdatedAt: courier.locationUpdatedAt || null

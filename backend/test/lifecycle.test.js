@@ -113,6 +113,7 @@ test.before(async () => {
     phone: courierUser.phone,
     vehicle: 'motorbike',
     isOnline: true,
+    verification: { status: 'approved', documentType: 'driving_licence', submittedAt: new Date(), reviewedAt: new Date() },
     lastKnownLocation: { type: 'Point', coordinates: [RESTAURANT_AT.lng, RESTAURANT_AT.lat] },
     locationUpdatedAt: new Date()
   });
@@ -443,6 +444,7 @@ test('offers expire and fall through to the next courier without the customer se
     name: 'Courier Two',
     vehicle: 'motorbike',
     isOnline: true,
+    verification: { status: 'approved', documentType: 'national_id', submittedAt: new Date(), reviewedAt: new Date() },
     lastKnownLocation: { type: 'Point', coordinates: [RESTAURANT_AT.lng + 0.004, RESTAURANT_AT.lat + 0.004] },
     locationUpdatedAt: new Date()
   });
@@ -473,4 +475,62 @@ test('offers expire and fall through to the next courier without the customer se
   assert.equal(after.status, 'PREPARING', 'the customer’s status never changed during the churn');
 
   await call(`/api/orders/${orderId}/cancel`, { method: 'POST', token: tokens.customer });
+});
+
+/**
+ * The brand a customer saved is the brand the Payment record carries - not whatever the
+ * configured gateway happens to be. The choice is read from the account on the server:
+ * no request body ever asserts it.
+ */
+test('the chosen payment brand reaches the Payment record', async () => {
+  const restaurant = await Restaurant.findOne({ name: 'Test Kitchen' });
+  const cart = {
+    restaurantId: String(restaurant._id),
+    lines: [{ menuItemId: shiroId, qty: 1 }],
+    deliveryAddress: { label: 'Home', line: 'Rome St', lat: CUSTOMER_HOME.lat, lng: CUSTOMER_HOME.lng }
+  };
+
+  const telebirr = await call('/api/auth/me/payment-methods', {
+    method: 'POST',
+    token: tokens.customer,
+    body: { brand: 'telebirr', label: 'Personal' }
+  });
+  assert.equal(telebirr.status, 201);
+  const card = await call('/api/auth/me/payment-methods', {
+    method: 'POST',
+    token: tokens.customer,
+    body: { brand: 'card', last4: '4242', expiryMonth: 9, expiryYear: 2030 }
+  });
+  assert.equal(card.status, 201);
+
+  // Saving the card must not un-stamp the default the customer already had.
+  const me = await call('/api/auth/me', { token: tokens.customer });
+  const asDefault = (id) => call(`/api/auth/me/payment-methods/${id}/default`, { method: 'PATCH', token: tokens.customer });
+
+  const saved = me.body.user.paymentMethods;
+  assert.equal(saved.filter((m) => m.isDefault).length, 1, 'exactly one method stays the default');
+  assert.equal(saved.find((m) => m.isDefault).brand, 'telebirr');
+  const cardId = saved.find((m) => m.brand === 'card').id;
+
+  const placed = await call('/api/orders', { method: 'POST', token: tokens.customer, body: cart });
+  assert.equal(placed.status, 201);
+  const orderId = placed.body.order.id;
+  assert.equal((await Payment.findOne({ orderId })).method, 'telebirr', 'placement records the chosen brand, not the gateway');
+
+  const intent = await call('/api/payments/intent', { method: 'POST', token: tokens.customer, body: { orderId } });
+  assert.equal(intent.status, 200);
+  const paid = await call('/api/payments/mock/confirm', { method: 'POST', token: tokens.customer, body: { paymentId: intent.body.intent.paymentId } });
+  assert.equal(paid.body.order.status, 'PAID');
+  assert.equal((await Payment.findOne({ orderId })).method, 'telebirr', 'gateway confirmation keeps the chosen brand');
+
+  const switched = await asDefault(cardId);
+  assert.equal(switched.status, 200);
+  assert.equal(switched.body.user.paymentMethods.find((m) => m.isDefault).brand, 'card');
+
+  const second = await call('/api/orders', { method: 'POST', token: tokens.customer, body: cart });
+  const secondId = second.body.order.id;
+  assert.equal((await Payment.findOne({ orderId: secondId })).method, 'card', 'the next order follows the new default');
+
+  await call(`/api/orders/${orderId}/cancel`, { method: 'POST', token: tokens.customer });
+  await call(`/api/orders/${secondId}/cancel`, { method: 'POST', token: tokens.customer });
 });
