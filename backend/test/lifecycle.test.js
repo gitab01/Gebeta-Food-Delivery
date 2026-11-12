@@ -1,4 +1,5 @@
-process.env.MONGODB_URI = process.env.TEST_MONGODB_URI || 'mongodb://127.0.0.1:27017/gebeta_test';
+require('./localDatabase');
+
 process.env.JWT_SECRET = 'test-secret';
 process.env.OFFER_TIMEOUT_MS = '20000';
 process.env.PICKUP_TOLERANCE_M = '500';
